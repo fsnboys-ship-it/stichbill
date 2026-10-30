@@ -1,0 +1,78 @@
+name: Foundation CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: foundation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17.6-bookworm
+        env:
+          POSTGRES_USER: stichbill_test
+          POSTGRES_PASSWORD: ci-local-only
+          POSTGRES_DB: stichbill_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U stichbill_test -d stichbill_test"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql://stichbill_test:ci-local-only@127.0.0.1:5432/stichbill_test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm install --global npm@11.9.0
+      - run: npm ci
+      - run: npm run ci:check
+      - run: npm run verify
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: linux-browser-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql://no_database:test-only@127.0.0.1:65432/stichbill_test
+      EXPECT_DATABASE_DOWN: 'true'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm install --global npm@11.9.0
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm run test:unit
+      - run: npm run openapi:check
+      - run: npx playwright install chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: windows-browser-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

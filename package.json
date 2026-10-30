@@ -1,0 +1,51 @@
+{
+  "name": "stichbill",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": "24.19.0",
+    "npm": "11.9.0"
+  },
+  "packageManager": "npm@11.9.0",
+  "scripts": {
+    "dev": "concurrently --kill-others --names api,web \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "tsx watch --tsconfig apps/api/tsconfig.json --env-file-if-exists=.env apps/api/src/main.ts",
+    "dev:web": "npm run dev --workspace @stichbill/web",
+    "build": "npm run build --workspace @stichbill/api && npm run build --workspace @stichbill/api-client && npm run build --workspace @stichbill/domain && npm run build --workspace @stichbill/worker && npm run build --workspace @stichbill/web",
+    "lint": "eslint .",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test:unit": "npm run build --workspace @stichbill/api && node scripts/run-tests.mjs unit",
+    "test:integration": "npm run build --workspace @stichbill/api && node --env-file-if-exists=.env scripts/run-tests.mjs integration",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:e2e": "playwright test",
+    "verify": "npm run lint && npm run typecheck && npm run build && npm test && npm run openapi:check",
+    "openapi:generate": "npm run build --workspace @stichbill/api && node apps/api/dist/openapi.js && openapi-typescript packages/api-client/openapi.json -o packages/api-client/src/schema.d.ts",
+    "openapi:check": "node scripts/check-openapi.mjs",
+    "db:up": "docker compose --env-file .env -f infra/local/compose.yaml up -d --wait",
+    "db:down": "docker compose --env-file .env -f infra/local/compose.yaml down",
+    "db:check": "npm run build --workspace @stichbill/api && node --env-file-if-exists=.env apps/api/dist/database/check.js",
+    "db:migrate": "npm run build --workspace @stichbill/api && node --env-file-if-exists=.env apps/api/dist/database/migrate.js",
+    "setup:env": "node scripts/setup-env.mjs",
+    "ci:check": "node scripts/check-ci.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.13.0",
+    "typescript-eslint": "8.72.1",
+    "typescript": "5.9.3",
+    "globals": "17.13.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "eslint-plugin-react-refresh": "0.5.7",
+    "@playwright/test": "1.64.1",
+    "@types/node": "24.10.1",
+    "concurrently": "10.0.6",
+    "tsx": "4.23.15",
+    "openapi-typescript": "7.13.0",
+    "yaml": "2.9.1"
+  }
+}

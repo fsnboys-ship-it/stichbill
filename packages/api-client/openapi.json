@@ -1,0 +1,112 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "operationId": "getHealth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        },
+        "summary": "API process liveness; does not imply database readiness",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/api/v1/health/ready": {
+      "get": {
+        "operationId": "getReadiness",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Database unavailable; connection details are never exposed"
+          }
+        },
+        "summary": "Local database readiness using SELECT 1",
+        "tags": [
+          "Health"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "STICH BILL API",
+    "description": "Task 002 development health API; no business endpoints.",
+    "version": "0.0.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ],
+            "example": "ok"
+          },
+          "service": {
+            "type": "string",
+            "example": "stichbill-api"
+          }
+        },
+        "required": [
+          "status",
+          "service"
+        ]
+      },
+      "ReadyResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ],
+            "example": "ok"
+          },
+          "service": {
+            "type": "string",
+            "example": "stichbill-api"
+          },
+          "database": {
+            "type": "string",
+            "enum": [
+              "up"
+            ],
+            "example": "up"
+          }
+        },
+        "required": [
+          "status",
+          "service",
+          "database"
+        ]
+      }
+    }
+  }
+}

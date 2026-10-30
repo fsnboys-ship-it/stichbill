@@ -1,0 +1,4 @@
+@import "tailwindcss";
+@theme { --font-sans: ui-sans-serif, system-ui, sans-serif; }
+body { margin: 0; }
+button:focus-visible { outline: 3px solid #2563eb; outline-offset: 4px; }
