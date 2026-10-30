@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   linux:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
@@ -27,8 +27,8 @@ jobs:
       APP_ENV: test
       DATABASE_URL: postgresql://stichbill_test:ci-local-only@127.0.0.1:5432/stichbill_test
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -38,7 +38,7 @@ jobs:
       - run: npm run verify
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: linux-browser-results
@@ -47,15 +47,15 @@ jobs:
             test-results/
           retention-days: 7
   windows:
-    runs-on: windows-latest
+    runs-on: windows-2025
     timeout-minutes: 15
     env:
       APP_ENV: test
       DATABASE_URL: postgresql://no_database:test-only@127.0.0.1:65432/stichbill_test
       EXPECT_DATABASE_DOWN: 'true'
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
           cache: npm
@@ -68,7 +68,7 @@ jobs:
       - run: npm run openapi:check
       - run: npx playwright install chromium
       - run: npm run test:e2e
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: windows-browser-results
