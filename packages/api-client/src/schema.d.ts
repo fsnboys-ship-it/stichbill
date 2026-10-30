@@ -28,7 +28,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Local database readiness using SELECT 1 */
+        /** Local database readiness with runtime role and access schema checks */
         get: operations["getReadiness"];
         put?: never;
         post?: never;

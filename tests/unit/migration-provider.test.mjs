@@ -4,8 +4,8 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SqlMigrationProvider } from '../../apps/api/dist/database/migrate.js';
-test('Task 002 migration directory is empty; provider only inspects files', async () => {
-  assert.deepEqual(await new SqlMigrationProvider(resolve('database/migrations')).getMigrations(), {});
+test('reviewed access migration is discoverable; provider only inspects files', async () => {
+  assert.deepEqual(Object.keys(await new SqlMigrationProvider(resolve('database/migrations')).getMigrations()), ['20261031000100_access_foundation.sql']);
 });
 test('provider orders reviewed names and rejects ambiguous naming; no SQL executes', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'stich-migration-test-'));

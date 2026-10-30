@@ -42,7 +42,7 @@
             "description": "Database unavailable; connection details are never exposed"
           }
         },
-        "summary": "Local database readiness using SELECT 1",
+        "summary": "Local database readiness with runtime role and access schema checks",
         "tags": [
           "Health"
         ]

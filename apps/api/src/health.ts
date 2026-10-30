@@ -16,7 +16,7 @@ export class HealthController {
   @ApiOkResponse({ type: HealthResponse })
   live(): HealthResponse { return { status: 'ok', service: 'stichbill-api' }; }
   @Get('ready')
-  @ApiOperation({ operationId: 'getReadiness', summary: 'Local database readiness using SELECT 1' })
+  @ApiOperation({ operationId: 'getReadiness', summary: 'Local database readiness with runtime role and access schema checks' })
   @ApiOkResponse({ type: ReadyResponse })
   @ApiServiceUnavailableResponse({ description: 'Database unavailable; connection details are never exposed' })
   async ready(): Promise<ReadyResponse> {

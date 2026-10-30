@@ -1,7 +1,7 @@
 import { Kysely, PostgresDialect, sql } from 'kysely';
 import { Pool } from 'pg';
 import { validateLocalDatabaseUrl } from '../config.js';
-// Deliberately empty: Task 002 has no business tables.
+// Access queries use explicit typed SQL. Business CRUD is a later increment.
 export type Database = Record<string, never>;
 export function createDatabase(url: string): Kysely<Database> {
   validateLocalDatabaseUrl(url);
@@ -12,5 +12,11 @@ export function createDatabase(url: string): Kysely<Database> {
   }) }) });
 }
 export async function probeDatabase(db: Kysely<Database>): Promise<void> {
-  await sql`select 1 as ready`.execute(db);
+  const { rows } = await sql<{safe: boolean}>`select current_user=current_database() || '_runtime'
+    and not rolsuper and not rolbypassrls and not rolcreaterole and not rolcreatedb
+    and not exists(select 1 from pg_auth_members where member=pg_roles.oid)
+    and not exists(select 1 from pg_class where relowner=pg_roles.oid and relnamespace='public'::regnamespace)
+    and to_regprocedure('auth.resolve_context(text,uuid)') is not null as safe
+    from pg_roles where rolname=current_user`.execute(db);
+  if (!rows[0]?.safe) throw new Error('Runtime database role or schema is not ready');
 }
