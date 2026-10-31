@@ -55,15 +55,15 @@ npm.cmd run test:e2e
 npm.cmd run dev
 ```
 
-`setup:db-env` moves the administrator/Compose settings into ignored `.env.db`, generates separate migrator/runtime passwords, and replaces DATABASE_URL in `.env` with the restricted runtime URL. It refuses to overwrite an existing `.env.db`. Runtime processes load `.env` only. Never load `.env.db` or `.env.test.db` into the web/API/worker. These files are for deliberate administration/test commands only; keep them private to your Windows account (file properties → Security).
+`setup:db-env` moves the administrator/Compose settings into ignored `.env.db`, generates separate migrator/runtime passwords, and replaces DATABASE_URL in `.env` with the restricted runtime URL. It preserves valid existing role credentials on rerun and rejects conflicting values. It parses and deterministically rewrites supported assignments, verifies staged files, then verifies the persisted files again. Unsupported keys or unrepresentable values fail before replacement; secrets are never printed. Runtime processes load `.env` only. Never load `.env.db` or `.env.test.db` into the web/API/worker. These files are for deliberate administration/test commands only; keep them private to your Windows account (file properties → Security).
 
-`db:provision` creates database-specific, non-superuser migrator/runtime roles, removes public database access and prevents runtime schema creation. Existing roles and passwords are preserved; incompatible roles require review. `db:migrate:local` explicitly enables both local migration gates and applies reviewed SQL with the migrator. It is never called by application startup or installation. Repeated migration runs verify checksums and apply only new migrations.
+`db:provision` creates database-specific, non-superuser migrator/runtime roles, removes public database access and prevents runtime schema creation. Existing roles and passwords are preserved only when the exact privilege contract passes. Unexpected ownership, grants, functions or RLS policies cause rejection without repair; incompatible roles require review. `db:migrate:local` explicitly enables both local migration gates and applies reviewed SQL with the migrator. It is never called by application startup or installation. Repeated migration runs verify checksums and apply only new migrations.
 
 `db:test:setup` creates the separate stichbill_test database if absent, generates its separate ignored configuration and provisions its roles. It never drops/resets a database. Integration tests accept only stichbill_test, apply reviewed migrations there, insert random synthetic fixtures, and remove only those fixtures. They never use stichbill_dev as a fallback.
 
 ## Existing Task 002 checkout
 
-Keep your existing `.env`, credentials and database/volume. Run `setup:db-env` once to separate the old bootstrap credentials, then provision/migrate/check and prepare the test database using the commands above. If `.env.db` already exists, skip setup:db-env. Do not run setup:env expecting it to overwrite an existing configuration. If interrupted between configuration steps, inspect the ignored files locally; do not delete a database or volume to repair credentials.
+Keep your existing `.env`, credentials and database/volume. Run `setup:db-env` once to separate the old bootstrap credentials, then provision/migrate/check and prepare the test database using the commands above. If `.env.db` already exists, setup:db-env verifies and preserves its valid administrator/migrator credentials. Do not run setup:env expecting it to overwrite an existing configuration. If interrupted between configuration steps, inspect the ignored files locally; do not delete a database or volume to repair credentials.
 
 ## Optional Docker setup
 
@@ -106,3 +106,11 @@ These URLs refer to the computer running the commands. Readiness rejects elevate
 Both CI jobs run full verification plus browser tests. Linux uses PostgreSQL in a service container; Windows starts a dedicated native PostgreSQL 17 cluster on port 55432 with SCRAM, runs the same isolation tests, then stops it. CI credentials are synthetic. This validates native binaries and cross-platform tooling, not the GUI installer or your particular Windows permissions/service configuration.
 
 This increment provides access persistence, session-context validation and read isolation only. Password login, cookie/CSRF handling, reset/invitations and owner/cashier setup screens require the next PM-reviewed increment. There are no products, inventory, tax rules, real users, production connections or deployments.
+
+## Security correction upgrade
+
+After checking out the reviewed security-correction commit, run `npm.cmd run setup:db-env`, `npm.cmd run db:provision`, then `npm.cmd run db:migrate:local` and `npm.cmd run db:check`. The original access migration stays immutable; the forward migration fixes global function defaults. Provisioning permits the exact known legacy schema/history only to reach that upgrade; readiness refuses the legacy default-ACL state. Do not repair a checksum mismatch by editing history.
+
+The test administrator URL is loaded only by integration tests. Security regressions create random `stichbill_test_security_<8 hex>` databases and their own roles, mutate only those disposable objects, and remove them afterward. Native PostgreSQL's local administrator must be able to create/drop these test databases and roles. No Docker command is involved. Never substitute a production/admin URL.
+
+Supported runtime environment keys are APP_ENV, API_HOST, API_PORT, ALLOW_MIGRATIONS and DATABASE_URL. Administrator settings (ADMIN_DATABASE_URL, MIGRATION_DATABASE_URL and POSTGRES_USER/PASSWORD/DB/PORT) live only in `.env.db`. `export`, whitespace, quoted values, CRLF/LF and absent final newline are supported. Comments/order are normalized. Run one setup process at a time. File mode 0600 is requested; on Windows keep the repository/private files restricted to your account using NTFS permissions.

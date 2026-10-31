@@ -1,6 +1,7 @@
-import { Kysely, PostgresDialect, sql } from 'kysely';
+import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 import { validateLocalDatabaseUrl } from '../config.js';
+import { assertDatabaseSecurity } from './security.js';
 // Access queries use explicit typed SQL. Business CRUD is a later increment.
 export type Database = Record<string, never>;
 export function createDatabase(url: string): Kysely<Database> {
@@ -12,11 +13,5 @@ export function createDatabase(url: string): Kysely<Database> {
   }) }) });
 }
 export async function probeDatabase(db: Kysely<Database>): Promise<void> {
-  const { rows } = await sql<{safe: boolean}>`select current_user=current_database() || '_runtime'
-    and not rolsuper and not rolbypassrls and not rolcreaterole and not rolcreatedb
-    and not exists(select 1 from pg_auth_members where member=pg_roles.oid)
-    and not exists(select 1 from pg_class where relowner=pg_roles.oid and relnamespace='public'::regnamespace)
-    and to_regprocedure('auth.resolve_context(text,uuid)') is not null as safe
-    from pg_roles where rolname=current_user`.execute(db);
-  if (!rows[0]?.safe) throw new Error('Runtime database role or schema is not ready');
+  await assertDatabaseSecurity(db, 'ready');
 }

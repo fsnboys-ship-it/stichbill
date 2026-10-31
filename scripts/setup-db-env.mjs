@@ -1,18 +1,29 @@
-// Explicit one-time upgrade from the health-only setup. Never prints credentials.
-import { readFile, writeFile, access } from 'node:fs/promises';
+import { readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
-import { parseEnv } from 'node:util';
-const root = new URL('../', import.meta.url);
-try { await access(new URL('.env.db', root)); throw new Error('.env.db already exists; preserved. Use the documented manual setup for changes.'); }
-catch (error) { if (error.code !== 'ENOENT') throw error; }
-const source = await readFile(new URL('.env', root), 'utf8');
-const env = parseEnv(source);
-const admin = new URL(env.DATABASE_URL);
-if (!['localhost', '127.0.0.1', '[::1]'].includes(admin.hostname) || !['/stichbill_dev', '/stichbill_test'].includes(admin.pathname) || admin.search || admin.hash || !['postgres:', 'postgresql:'].includes(admin.protocol)) throw new Error('Only the dedicated local development/test database may be configured.');
-const database = admin.pathname.slice(1);
-const runtime = new URL(admin); runtime.username = `${database}_runtime`; runtime.password = randomBytes(24).toString('hex');
-const migrator = new URL(admin); migrator.username = `${database}_migrator`; migrator.password = randomBytes(24).toString('hex');
-const compose = ['POSTGRES_USER','POSTGRES_PASSWORD','POSTGRES_DB','POSTGRES_PORT'].filter(key => env[key]).map(key => `${key}=${env[key]}`).join('\n');
-await writeFile(new URL('.env.db', root), `# Administrative CLI only. Never load into API/web/worker.\nADMIN_DATABASE_URL=${admin.href}\nMIGRATION_DATABASE_URL=${migrator.href}\n${compose}\n`, { flag: 'wx', mode: 0o600 });
-await writeFile(new URL('.env', root), source.replace(/^DATABASE_URL=.*$/m, `DATABASE_URL=${runtime.href}`).replace(/^POSTGRES_(USER|PASSWORD|DB|PORT)=.*\r?\n/gm,''), { mode: 0o600 });
-console.log('Separated local runtime and administrative configuration. Run db:provision next. Existing databases/roles have not been changed.');
+import { pathToFileURL } from 'node:url';
+import { resolve } from 'node:path';
+import { separateEnvironment, verifySeparation } from './env-separation.mjs';
+export async function rewriteEnvironment(root=new URL('../',import.meta.url)) {
+  const runtimePath=new URL('.env',root),adminPath=new URL('.env.db',root);
+  const suffix=randomBytes(8).toString('hex');
+  const runtimeTemp=new URL(`.env.runtime-${suffix}`,root),adminTemp=new URL(`.env.admin-${suffix}`,root);
+  try {
+    const source=await readFile(runtimePath,'utf8');
+    let existing='';try{existing=await readFile(adminPath,'utf8');}catch(error){if(error.code!=='ENOENT')throw error;}
+    const {runtimeText,adminText}=separateEnvironment(source,existing);
+    // Verify both staged files before replacing either. Write administrative settings first so
+    // interruption cannot lose the original admin credential. A rerun preserves existing roles.
+    await writeFile(adminTemp,adminText,{flag:'wx',mode:0o600});
+    await writeFile(runtimeTemp,runtimeText,{flag:'wx',mode:0o600});
+    verifySeparation(await readFile(runtimeTemp,'utf8'),await readFile(adminTemp,'utf8'));
+    await rename(adminTemp,adminPath);
+    await rename(runtimeTemp,runtimePath);
+    verifySeparation(await readFile(runtimePath,'utf8'),await readFile(adminPath,'utf8'));
+  } finally {await Promise.all([rm(runtimeTemp,{force:true}),rm(adminTemp,{force:true})]);}
+}
+if(process.argv[1] && import.meta.url===pathToFileURL(resolve(process.argv[1])).href) {
+  rewriteEnvironment().then(()=>console.log('Verified local credential separation. Runtime contains only restricted application settings.')).catch(()=>{
+    console.error('Environment separation failed. Review supported keys, local URLs, role names and private file permissions. Credentials are not logged; do not start the API until separation succeeds.');
+    process.exitCode=1;
+  });
+}
