@@ -12,9 +12,9 @@ export function validateLocalDatabaseUrl(value: string): string {
   try { url = new URL(value); } catch { throw new Error('DATABASE_URL must be a valid local PostgreSQL URL'); }
   if (!['postgres:', 'postgresql:'].includes(url.protocol) ||
       !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) ||
-      !['/stichbill_dev', '/stichbill_test'].includes(url.pathname) ||
+      !/^\/stichbill_(dev|test(?:_security_[a-f0-9]{8})?)$/.test(url.pathname) ||
       !url.username || !url.password || url.search || url.hash) {
-    throw new Error('Only local stichbill_dev/stichbill_test PostgreSQL databases are permitted in Task 002');
+    throw new Error('Only dedicated local stichbill_dev/stichbill_test PostgreSQL databases are permitted');
   }
   if (decodeURIComponent(url.password) === 'replace-with-local-password') {
     throw new Error('Replace the example database password using npm run setup:env');

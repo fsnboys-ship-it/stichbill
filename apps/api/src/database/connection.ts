@@ -1,7 +1,8 @@
-import { Kysely, PostgresDialect, sql } from 'kysely';
+import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 import { validateLocalDatabaseUrl } from '../config.js';
-// Deliberately empty: Task 002 has no business tables.
+import { assertDatabaseSecurity } from './security.js';
+// Access queries use explicit typed SQL. Business CRUD is a later increment.
 export type Database = Record<string, never>;
 export function createDatabase(url: string): Kysely<Database> {
   validateLocalDatabaseUrl(url);
@@ -12,5 +13,5 @@ export function createDatabase(url: string): Kysely<Database> {
   }) }) });
 }
 export async function probeDatabase(db: Kysely<Database>): Promise<void> {
-  await sql`select 1 as ready`.execute(db);
+  await assertDatabaseSecurity(db, 'ready');
 }
