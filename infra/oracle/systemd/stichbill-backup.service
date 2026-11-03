@@ -1,0 +1,15 @@
+[Unit]
+Description=STICH BILL encrypted staging backup
+After=postgresql.service network-online.target
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+EnvironmentFile=/etc/stichbill/backup.env
+ExecStart=/bin/bash /opt/stichbill/current/infra/oracle/backup.sh
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/postgresql

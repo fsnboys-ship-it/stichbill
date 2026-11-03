@@ -1,0 +1,52 @@
+# Task 007 — Staging configuration and approved NOLOGIN owner model
+
+Baseline: `873ec79` on main, correct repository `fsnboys-ship-it/stichbill`. Dedicated branch `task007-staging-configuration`. The earlier unrelated frontend preview edit was stashed before branching; it is excluded from this change. No application screen, authentication algorithm, business command, existing SQL migration or function-security manifest is rewritten.
+
+## Security decisions
+
+The old login-superuser database-owner contract was a bootstrap assumption, not required by RLS. It remains supported only on existing bounded development/test databases. Explicit staging configuration now requires the dedicated staging database and named runtime role, a loopback host, an explicit unprivileged port and generated application credentials. Oracle templates use 5432; native Windows test PostgreSQL can use 55432. Provisioning requires all URLs to use the same port and independent passwords. Production configuration remains rejected.
+
+Staging requires a dedicated NOLOGIN/NOSUPERUSER owner with no memberships, elevated flags, role settings, application objects, unrelated explicit grants or other owned databases. A separate authenticated bootstrap superuser temporarily SET ROLEs to that owner for database grants; no persistent role membership is created. The restricted migrator retains object ownership and existing database privileges; runtime retains existing application grants. Exact grantor/ACL checks are preserved. Fresh bootstrap, provisioning and readiness have distinct gates. Existing unexpected roles/objects/ACLs are rejected, never adopted/repaired. Existing migration SQL, checksums, all eight FORCE RLS policies and SECURITY DEFINER contracts are unchanged.
+
+Staging uses one canonical HTTPS origin and the existing Secure/HttpOnly/SameSite=Strict/__Host- cookie and CSRF flow. Fastify trusts the first hop only from IPv4 loopback; proxy templates replace forwarded headers, preserve API paths, avoid auth caches and block public docs/readiness. CORS is not opened. Real SMTP recovery uses verified TLS/STARTTLS, a canonical reset fragment and redacted delivery errors. Local recovery delivery remains unchanged. Nodemailer and its type declarations are exact-pinned; no provider is provisioned.
+
+## Changed files
+
+- `apps/api/package.json`, `package-lock.json`: pinned SMTP dependency/types.
+- `apps/api/src/config.ts`: strict staging environment, database, origin and SMTP validation.
+- `apps/api/src/app.ts`, `apps/api/src/auth/routes.ts`: scoped proxy trust, origin injection and recovery adapter selection.
+- `apps/api/src/auth/smtp-delivery.ts`: verified TLS SMTP delivery without provider/credential logging.
+- `apps/api/src/database/connection.ts`, `check.ts`: environment-aware restricted connections/readiness.
+- `apps/api/src/database/migrate.ts`: explicit staging migration gates; original local gates retained.
+- `apps/api/src/database/security.ts`: explicit owner-role authority inspection and exact staging contract.
+- `scripts/provision-staging-db.mjs`: transactional, locked, fresh-only bootstrap and idempotent verification.
+- `database/migrations/README.md`: staging contract alongside existing local contract. No SQL changed.
+- `infra/oracle/README.md`, `BACKUP_RESTORE.md`: provisioning, migration, network, release and encrypted recovery runbooks.
+- `infra/oracle/nginx-staging.conf`, `nginx-api.conf`: HTTPS/proxy templates.
+- `infra/oracle/staging.env.example`: placeholders only; actual secrets stay outside Git.
+- `infra/oracle/backup.sh`: encrypted dump pipeline and private-bucket upload template.
+- `infra/oracle/systemd/stichbill-api.service`, `stichbill-backup.service`, `stichbill-backup.timer`: service/timer templates.
+- `tests/integration/staging.test.mjs`, `tests/unit/staging.test.mjs`: fresh PostgreSQL 17 owner/provisioning/escalation, origin/proxy/auth, configuration, SMTP TLS and redaction tests.
+- `docs/TASK_007_REPORT.md`: this report.
+
+## Verification boundaries
+
+Full lint/typecheck/build/unit/PostgreSQL integration/OpenAPI verification and existing browser suite are required, plus workflow validation, Nginx syntax validation and backup shell syntax. Exact final results and hosted Linux/Windows CI status are reported in the draft PR. Integration uses a fresh exclusively created local staging database on PostgreSQL 17, a separately generated bootstrap administrator and generated application credentials. It rejects an existing staging database/roles before creation and deletes only its own fixtures. An adversarial grantor test deliberately corrupts and restores ACL metadata only inside that owned disposable database. Tests exercise fresh bootstrap rejection, idempotence, privilege drift, actual SET ROLE/escalation denials, strict grantors, migration CLI gates, secure cookies and real application commands.
+
+SMTP tests include a real local plaintext SMTP server refusing STARTTLS: no AUTH or recovery content is sent. Actual provider delivery is not exercised. Oracle resources, DNS, public HTTPS, VM service activation, encrypted OCI uploads and an off-host restore drill are not executed. Existing dependency audit findings remain a separate maintenance concern; no broad dependency update is attempted.
+
+## Remaining execution gates and risks
+
+Review/approve this draft before merge. Separately approve Oracle provisioning/deployment, region/domain/costs, real SMTP credentials/sender DNS and tester policy. Validate the pinned toolchain on Arm. Verify systemd paths, certificate renewal and persistent PostgreSQL mount dependencies on the actual VM. A single VM is not HA and free resources may be reclaimed. Isolate backup instance-principal metadata privileges from the API OS user before enabling uploads. Keep decryption keys off-host; prove complete role/ACL-preserving restore and invalidate restored sessions/reset tokens before reopening access. RPO/RTO are targets, not tested guarantees. Production still needs email ownership verification policy, retention/housekeeping, operational ownership, independent backups and dependency/runtime review.
+
+Stop for review. No merge, cloud provisioning, purchase, deployment or production data change is included.
+
+## Local verification results
+
+- `npm run verify`: passed lint, all workspace type checks/builds, 41/41 unit tests, 118/118 real PostgreSQL integration/security tests, and OpenAPI drift checks.
+- `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:e2e`: 4/4 passed, including mobile owner lifecycle and shop/branch operations. System Chromium was used locally; CI retains its existing browser setup.
+- `npm run ci:check`: passed existing Linux/native Windows workflow validation. Hosted execution status is reported separately in the PR/conversation.
+- Nginx template validation in a disposable Nginx container with synthetic certificates: `nginx -t` passed.
+- `bash -n infra/oracle/backup.sh` and `git diff --check`: passed.
+- `npm audit --json`: 18 moderate findings, zero low/high/critical; count unchanged from the inherited baseline. No broad dependency remediation is included.
+- Existing SQL migrations and `security-manifest.ts`: unchanged.

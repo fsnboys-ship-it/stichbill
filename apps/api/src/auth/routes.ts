@@ -23,10 +23,10 @@ const session = (request: FastifyRequest) => {
 function safeEqual(a: string, b: string) {
   return a.length === 64 && b.length === 64 && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }
-export function registerAuthRoutes(server: FastifyInstance, db: Kysely<Database>, deliverReset: ResetDelivery) {
-  void server.register(async scoped => { configureAuthRoutes(scoped, db, deliverReset); });
+export function registerAuthRoutes(server: FastifyInstance, db: Kysely<Database>, deliverReset: ResetDelivery, origins = ['http://127.0.0.1:5173', 'http://localhost:5173', 'http://127.0.0.1:3001', 'http://localhost:3001']) {
+  void server.register(async scoped => { configureAuthRoutes(scoped, db, deliverReset, origins); });
 }
-function configureAuthRoutes(server: FastifyInstance, db: Kysely<Database>, deliverReset: ResetDelivery) {
+function configureAuthRoutes(server: FastifyInstance, db: Kysely<Database>, deliverReset: ResetDelivery, origins = ['http://127.0.0.1:5173', 'http://localhost:5173', 'http://127.0.0.1:3001', 'http://localhost:3001']) {
   server.setErrorHandler((_error, _request, reply) => {
     // Database details, request bodies, credentials and cookies must never reach error logs.
     void reply.code(503).send(generic);
@@ -45,7 +45,7 @@ function configureAuthRoutes(server: FastifyInstance, db: Kysely<Database>, deli
     reply.header('Cache-Control', 'no-store').header('Referrer-Policy', 'no-referrer').header('X-Content-Type-Options', 'nosniff');
     if (request.method === 'GET') return;
     const origin = request.headers.origin;
-    if (!origin || !['http://127.0.0.1:5173', 'http://localhost:5173', 'http://127.0.0.1:3001', 'http://localhost:3001'].includes(origin) ||
+    if (!origin || !origins.includes(origin) ||
         request.headers['sec-fetch-site'] === 'cross-site' ||
         !safeEqual(cookies(request)['__Host-stich-csrf'] ?? '', String(request.headers['x-csrf-token'] ?? ''))) {
       return reply.code(403).send(generic);
