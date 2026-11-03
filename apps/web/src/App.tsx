@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { OwnerAccess } from './OwnerAccess';
 import { api } from '@stichbill/api-client';
 type State = { api: string; database: string; checked: string | null; busy: boolean };
 async function fetchHealth(signal: AbortSignal): Promise<State> {
@@ -25,6 +26,7 @@ export function App() {
   return <main className="min-h-screen bg-slate-50 px-6 py-16 text-slate-900 sm:py-24">
     <div className="mx-auto max-w-xl">
       <p className="text-xs font-bold tracking-[0.24em] text-indigo-700">STICH BILL</p>
+      <OwnerAccess />
       <h1 className="mt-5 text-3xl font-semibold tracking-tight">Development foundation</h1>
       <p className="mt-3 text-base leading-7 text-slate-600">The workspace is ready for the next phase. Check the API and local database connection below.</p>
       <section aria-label="Service status" aria-live="polite" aria-busy={state.busy} className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

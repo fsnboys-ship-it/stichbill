@@ -47,11 +47,498 @@
           "Health"
         ]
       }
+    },
+    "/api/v1/auth/register": {
+      "post": {
+        "operationId": "owner_register",
+        "tags": [
+          "Owner access"
+        ],
+        "summary": "register",
+        "description": "Requires an allowed Origin, the HttpOnly CSRF cookie, and its matching X-CSRF-Token header. Authentication uses an opaque HttpOnly Secure SameSite=Strict cookie. Registration and recovery use generic responses.",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "maxLength": 254
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 12,
+                    "maxLength": 128,
+                    "writeOnly": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completed; login and registration return a rotated csrf token. Recovery always returns the same public message."
+          },
+          "400": {
+            "description": "Invalid input or reset token"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "CSRF validation failed"
+          },
+          "409": {
+            "description": "Onboarding unavailable"
+          },
+          "429": {
+            "description": "Try again after the 15 minute throttle window"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "owner_login",
+        "tags": [
+          "Owner access"
+        ],
+        "summary": "login",
+        "description": "Requires an allowed Origin, the HttpOnly CSRF cookie, and its matching X-CSRF-Token header. Authentication uses an opaque HttpOnly Secure SameSite=Strict cookie. Registration and recovery use generic responses.",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "maxLength": 254
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 12,
+                    "maxLength": 128,
+                    "writeOnly": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completed; login and registration return a rotated csrf token. Recovery always returns the same public message."
+          },
+          "400": {
+            "description": "Invalid input or reset token"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "CSRF validation failed"
+          },
+          "409": {
+            "description": "Onboarding unavailable"
+          },
+          "429": {
+            "description": "Try again after the 15 minute throttle window"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/recover": {
+      "post": {
+        "operationId": "owner_recover",
+        "tags": [
+          "Owner access"
+        ],
+        "summary": "recover",
+        "description": "Requires an allowed Origin, the HttpOnly CSRF cookie, and its matching X-CSRF-Token header. Authentication uses an opaque HttpOnly Secure SameSite=Strict cookie. Registration and recovery use generic responses.",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "maxLength": 254
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completed; login and registration return a rotated csrf token. Recovery always returns the same public message."
+          },
+          "400": {
+            "description": "Invalid input or reset token"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "CSRF validation failed"
+          },
+          "409": {
+            "description": "Onboarding unavailable"
+          },
+          "429": {
+            "description": "Try again after the 15 minute throttle window"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/reset": {
+      "post": {
+        "operationId": "owner_reset",
+        "tags": [
+          "Owner access"
+        ],
+        "summary": "reset",
+        "description": "Requires an allowed Origin, the HttpOnly CSRF cookie, and its matching X-CSRF-Token header. Authentication uses an opaque HttpOnly Secure SameSite=Strict cookie. Registration and recovery use generic responses.",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "token",
+                  "password"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$",
+                    "writeOnly": true
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 12,
+                    "maxLength": 128,
+                    "writeOnly": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completed; login and registration return a rotated csrf token. Recovery always returns the same public message."
+          },
+          "400": {
+            "description": "Invalid input or reset token"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "CSRF validation failed"
+          },
+          "409": {
+            "description": "Onboarding unavailable"
+          },
+          "429": {
+            "description": "Try again after the 15 minute throttle window"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/onboard": {
+      "post": {
+        "operationId": "owner_onboard",
+        "tags": [
+          "Owner access"
+        ],
+        "summary": "onboard",
+        "description": "Requires an allowed Origin, the HttpOnly CSRF cookie, and its matching X-CSRF-Token header. Authentication uses an opaque HttpOnly Secure SameSite=Strict cookie. Registration and recovery use generic responses.",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "businessName",
+                  "ownerName"
+                ],
+                "properties": {
+                  "businessName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "ownerName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completed; login and registration return a rotated csrf token. Recovery always returns the same public message."
+          },
+          "400": {
+            "description": "Invalid input or reset token"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "CSRF validation failed"
+          },
+          "409": {
+            "description": "Onboarding unavailable"
+          },
+          "429": {
+            "description": "Try again after the 15 minute throttle window"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "owner_logout",
+        "tags": [
+          "Owner access"
+        ],
+        "summary": "logout",
+        "description": "Requires an allowed Origin, the HttpOnly CSRF cookie, and its matching X-CSRF-Token header. Authentication uses an opaque HttpOnly Secure SameSite=Strict cookie. Registration and recovery use generic responses.",
+        "parameters": [
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [],
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completed; login and registration return a rotated csrf token. Recovery always returns the same public message."
+          },
+          "400": {
+            "description": "Invalid input or reset token"
+          },
+          "401": {
+            "description": "Authentication failed"
+          },
+          "403": {
+            "description": "CSRF validation failed"
+          },
+          "409": {
+            "description": "Onboarding unavailable"
+          },
+          "429": {
+            "description": "Try again after the 15 minute throttle window"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/csrf": {
+      "get": {
+        "operationId": "owner_csrf",
+        "tags": [
+          "Owner access"
+        ],
+        "responses": {
+          "200": {
+            "description": "Sets CSRF cookie and returns csrf for the request header",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "csrf"
+                  ],
+                  "properties": {
+                    "csrf": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/session": {
+      "get": {
+        "operationId": "owner_session",
+        "tags": [
+          "Owner access"
+        ],
+        "responses": {
+          "200": {
+            "description": "Only active business memberships from the authenticated server session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "businesses"
+                  ],
+                  "properties": {
+                    "businesses": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "name"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "name": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or expired session"
+          }
+        }
+      }
+    },
+    "/api/v1/auth/business/{id}": {
+      "get": {
+        "operationId": "owner_business",
+        "tags": [
+          "Owner access"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Business read under transaction-scoped session and RLS context"
+          },
+          "403": {
+            "description": "No active membership context"
+          }
+        }
+      }
     }
   },
   "info": {
     "title": "STICH BILL API",
-    "description": "Task 002 development health API; no business endpoints.",
+    "description": "Local development health and owner authentication API.",
     "version": "0.0.0",
     "contact": {}
   },
