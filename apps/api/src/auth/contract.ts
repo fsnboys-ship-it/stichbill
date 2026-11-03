@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { locationInput, staffInput } from '../organisation/routes.js';
 import type { OpenAPIObject } from '@nestjs/swagger';
 // Fastify handlers are registered outside Nest's decorators; publish their contract explicitly.
 export function addAuthContract(document: OpenAPIObject) {
@@ -24,4 +26,13 @@ export function addAuthContract(document: OpenAPIObject) {
     '200': { description: 'Only active business memberships from the authenticated server session', content: { 'application/json': { schema: { type: 'object', required: ['businesses'], properties: { businesses: { type: 'array', items: { type: 'object', required: ['id', 'name'], properties: { id: { ...text, format: 'uuid' }, name: text } } } } } } } }, '401': { description: 'Invalid or expired session' },
   } } };
   document.paths['/api/v1/auth/business/{id}'] = { get: { operationId: 'owner_business', tags: ['Owner access'], parameters: [{ name: 'id', in: 'path', required: true, schema: { ...text, format: 'uuid' } }], responses: { '200': { description: 'Business read under transaction-scoped session and RLS context' }, '403': { description: 'No active membership context' } } } };
+  for (const [operation, schema] of Object.entries({ location: locationInput, staff: staffInput })) {
+    document.paths[`/api/v1/auth/organisation/{tenant}/${operation}`] = { post: {
+      operationId: `organisation_${operation}`, parameters: [{name:'tenant',in:'path',required:true,schema:{type:'string',format:'uuid'}},{name:'X-CSRF-Token',in:'header',required:true,schema:text}],
+      requestBody: { required:true, content:{'application/json':{schema:z.toJSONSchema(schema) as never}} },
+      responses:{'200':{description:'Saved transactionally'},'400':{description:'Invalid input'},'403':{description:'Access denied'},'409':{description:'Invalid assignment, duplicate code or last owner'}}
+    }};
+  }
+  document.paths['/api/v1/auth/organisation/{tenant}'] = { get: { operationId:'organisation_read',parameters:[{name:'tenant',in:'path',required:true,schema:{type:'string',format:'uuid'}}],responses:{'200':{description:'Permitted shops and branches; staff and inactive locations only for owners'},'403':{description:'Access denied'}} }};
+
 }

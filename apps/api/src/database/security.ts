@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { sql, type Kysely } from 'kysely';
 import type { Database } from './connection.js';
-import { functionHashes, authFunctions } from './security-manifest.js';
+import { functionHashes, authFunctions, organisationFunctions } from './security-manifest.js';
 
 export const tenantTables = ['tenants','memberships','shops','branches','roles','membership_roles','membership_scopes','membership_sessions'];
 type Grant = { role: string; privilege: string; grantable: boolean; grantor: string };
@@ -93,9 +93,11 @@ export function validateSecurity(s: Snapshot, mode: 'provision'|'ready', expecte
     requireSafe(mode==='provision' && s.schemas.length===1 && s.functions.length===0 && s.defaults.length===0 && s.policies.length===0,'unmigrated database');
     return 'provisioned';
   }
+  const hasOrganisation=s.relations.some(t=>t.schema==='auth' && t.name==='access_events');
+  requireSafe(mode!=='ready' || hasOrganisation,'organisation migration missing');
   const hasAuth=s.relations.some(t=>t.schema==='auth' && t.name==='password_resets');
   requireSafe(mode!=='ready' || hasAuth,'authentication migration missing');
-  const expectedTables=[...(hasAuth?['auth.password_resets','auth.attempt_buckets']:[]),...tenantTables.map(t=>`public.${t}`),'public.migration_history','auth.identity_accounts','auth.identity_sessions'];
+  const expectedTables=[...(hasOrganisation?['auth.access_events']:[]),...(hasAuth?['auth.password_resets','auth.attempt_buckets']:[]),...tenantTables.map(t=>`public.${t}`),'public.migration_history','auth.identity_accounts','auth.identity_sessions'];
   const tables=s.relations.filter(t=>t.kind==='r');
   requireSafe(tables.length===expectedTables.length && tables.every(t=>expectedTables.includes(`${t.schema}.${t.name}`)),'protected table set');
   requireSafe(s.schemas.length===2 && s.relations.every(r=>r.owner===migrator && ['r','i'].includes(r.kind)),'object ownership or kind');
@@ -111,10 +113,10 @@ export function validateSecurity(s: Snapshot, mode: 'provision'|'ready', expecte
     requireSafe(admin?.command==='*' && admin.permissive && admin.roles.length===1 && admin.roles[0]===migrator && admin.using==='true' && admin.check==='true','maintenance policy');
     requireSafe(read?.command==='r' && read.permissive && read.roles.length===1 && read.roles[0]===runtime && read.check===null && normal(read.using)===normal(readExpressions[table]!),'runtime policy');
   }
-  requireSafe(s.functions.length===3+(hasAuth?Object.keys(authFunctions).length:0),'function allowlist');
+  requireSafe(s.functions.length===3+(hasOrganisation?Object.keys(organisationFunctions).length:0)+(hasAuth?Object.keys(authFunctions).length:0),'function allowlist');
   const signatures:Record<string,string>={resolve_context:'text, uuid',can_access:'uuid, uuid, uuid',is_owner:'uuid'};
   for(const f of s.functions) {
-    const extra = hasAuth ? (authFunctions as Record<string,{args:string;language:string;volatility:string;hash:string}>)[f.name] : undefined;
+    const extra = hasAuth ? ({...authFunctions,...(hasOrganisation?organisationFunctions:{})} as Record<string,{args:string;language:string;volatility:string;hash:string}>)[f.name] : undefined;
     requireSafe(f.schema==='auth' && f.owner===migrator && f.definer && f.language===(extra?.language ?? 'sql') && f.volatility===(extra?.volatility ?? 's') && f.args===(extra?.args ?? signatures[f.name]) && JSON.stringify(f.settings)===JSON.stringify(['search_path=pg_catalog']) && createHash('sha256').update(f.body).digest('hex')===(extra?.hash ?? functionHashes[f.name]) && aclMatches(f.acl,migrator,{[runtime]:['EXECUTE']}) && f.executable,'function definition or ACL');
   }
   // Provisioning accepts the exact immutable legacy baseline for the forward migration.

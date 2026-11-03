@@ -106,12 +106,13 @@ test('access foundation against real PostgreSQL runtime role', async t => {
       try {
         await writeFile(join(dir,'20261031000300_function_defaults.sql'),await readFile(resolve('database/migrations/20261031000300_function_defaults.sql'),'utf8'));
         await writeFile(join(dir,'20261103000100_owner_authentication.sql'),await readFile(resolve('database/migrations/20261103000100_owner_authentication.sql'),'utf8'));
+        await writeFile(join(dir,'20261103000200_organisation_access.sql'),await readFile(resolve('database/migrations/20261103000200_organisation_access.sql'),'utf8'));
         await writeFile(join(dir,name),original+'\n-- tampered'); await assert.rejects(()=>applyMigrations(migration,dir),/checksum/);
         await writeFile(join(dir,name),original);
-        await writeFile(join(dir,'20261103000200_failure.sql'),'CREATE TABLE public.rollback_fixture(id int); SELECT 1/0;');
+        await writeFile(join(dir,'20261103000300_failure.sql'),'CREATE TABLE public.rollback_fixture(id int); SELECT 1/0;');
         await assert.rejects(()=>applyMigrations(migration,dir),{code:'22012'});
         assert.equal((await sql`select to_regclass('public.rollback_fixture') as name`.execute(migration)).rows[0].name,null);
-        assert.equal((await sql`select count(*)::int as count from public.migration_history`.execute(migration)).rows[0].count,3);
+        assert.equal((await sql`select count(*)::int as count from public.migration_history`.execute(migration)).rows[0].count,4);
       } finally {await rm(dir,{recursive:true});}
     });
     await t.test('real API readiness accepts runtime and rejects migrator credentials',async()=>{

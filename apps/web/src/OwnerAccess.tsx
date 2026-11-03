@@ -1,3 +1,4 @@
+import { Organisation } from './Organisation';
 import { useEffect, useState, type FormEvent } from 'react';
 type View = 'login' | 'register' | 'recover' | 'reset' | 'setup' | 'business';
 type Business = { id: string; name: string };
@@ -73,6 +74,7 @@ export function OwnerAccess() {
       {message && <p role="status" className="rounded-lg bg-slate-100 p-3 text-sm leading-6">{message}</p>}
       <button disabled={busy || !csrf} className="min-h-12 w-full rounded-lg bg-indigo-700 px-4 py-3 font-semibold text-white disabled:opacity-50">{busy ? 'Please wait…' : ({login:'Sign in',register:'Create account',recover:'Send recovery instructions',reset:'Change password',setup:'Create business',business:'Sign out'})[view]}</button>
     </form>
+    {view === 'business' && businesses.map(b => <Organisation key={b.id} tenant={b.id} csrf={csrf} />)}
     {['login', 'register', 'recover'].includes(view) && <nav aria-label="Account access" className="mt-4 flex flex-wrap gap-2">
       {view !== 'login' && <button disabled={busy} onClick={() => change('login')} className="min-h-11 px-2 text-indigo-700">Sign in</button>}
       {view !== 'register' && <button disabled={busy} onClick={() => change('register')} className="min-h-11 px-2 text-indigo-700">Create owner account</button>}
