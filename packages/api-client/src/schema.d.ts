@@ -254,6 +254,140 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/catalogue/{tenant}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["catalogue_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/catalogue/{tenant}/products/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["catalogue_product"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/catalogue/{tenant}/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Owner-only. Exact server session/shop/branch permission checks, CSRF header and cookie required. Prices are decimal strings with at most six places; selling price cannot exceed MRP. Create product and initial variants are atomic. */
+        post: operations["catalogue_categories"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/catalogue/{tenant}/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Owner-only. Exact server session/shop/branch permission checks, CSRF header and cookie required. Prices are decimal strings with at most six places; selling price cannot exceed MRP. Create product and initial variants are atomic. */
+        post: operations["catalogue_brands"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/catalogue/{tenant}/products": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Owner-only. Exact server session/shop/branch permission checks, CSRF header and cookie required. Prices are decimal strings with at most six places; selling price cannot exceed MRP. Create product and initial variants are atomic. */
+        post: operations["catalogue_products"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/catalogue/{tenant}/products/{id}/variants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Owner-only. Exact server session/shop/branch permission checks, CSRF header and cookie required. Prices are decimal strings with at most six places; selling price cannot exceed MRP. Create product and initial variants are atomic. */
+        post: operations["catalogue_products__id__variants"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/catalogue/{tenant}/products/{id}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Owner-only. Exact server session/shop/branch permission checks, CSRF header and cookie required. Prices are decimal strings with at most six places; selling price cannot exceed MRP. Create product and initial variants are atomic. */
+        post: operations["catalogue_products__id__image"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/catalogue/{tenant}/images/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Private local image, permission checked on every read; no public URL or cache. */
+        get: operations["catalogue_image"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -925,6 +1059,479 @@ export interface operations {
             };
             /** @description Access denied */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    catalogue_list: {
+        parameters: {
+            query: {
+                shopId: string;
+                branchId?: string;
+                search?: string;
+                status?: string;
+                categoryId?: string;
+                brandId?: string;
+                page?: number;
+            };
+            header?: never;
+            path: {
+                tenant: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorised catalogue data; decimal prices are strings and cost is owner-only */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid input or scope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Session, scope or owner access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Product/image unavailable */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Duplicate identifier or stale version */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    catalogue_product: {
+        parameters: {
+            query: {
+                shopId: string;
+                branchId?: string;
+            };
+            header?: never;
+            path: {
+                tenant: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorised catalogue data; decimal prices are strings and cost is owner-only */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid input or scope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Session, scope or owner access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Product/image unavailable */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Duplicate identifier or stale version */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    catalogue_categories: {
+        parameters: {
+            query: {
+                shopId: string;
+                branchId?: string;
+            };
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                tenant: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    id: string | null;
+                    version: number | null;
+                    name: string;
+                    active: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Authorised catalogue data; decimal prices are strings and cost is owner-only */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid input or scope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Session, scope or owner access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Product/image unavailable */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Duplicate identifier or stale version */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    catalogue_brands: {
+        parameters: {
+            query: {
+                shopId: string;
+                branchId?: string;
+            };
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                tenant: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    id: string | null;
+                    version: number | null;
+                    name: string;
+                    active: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Authorised catalogue data; decimal prices are strings and cost is owner-only */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid input or scope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Session, scope or owner access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Product/image unavailable */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Duplicate identifier or stale version */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    catalogue_products: {
+        parameters: {
+            query: {
+                shopId: string;
+                branchId?: string;
+            };
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                tenant: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    id: string | null;
+                    version: number | null;
+                    styleCode: string;
+                    name: string;
+                    description: string;
+                    categoryId: string | null;
+                    brandId: string | null;
+                    hsnCode: string;
+                    active: boolean;
+                    shopIds: string[];
+                    variants: {
+                        id: string | null;
+                        version: number | null;
+                        sku: string;
+                        size: string;
+                        colour: string;
+                        active: boolean;
+                        costPrice: string;
+                        sellingPrice: string;
+                        mrp: string;
+                        barcodes: string[];
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Authorised catalogue data; decimal prices are strings and cost is owner-only */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid input or scope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Session, scope or owner access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Product/image unavailable */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Duplicate identifier or stale version */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    catalogue_products__id__variants: {
+        parameters: {
+            query: {
+                shopId: string;
+                branchId?: string;
+            };
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                tenant: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    id: string | null;
+                    version: number | null;
+                    sku: string;
+                    size: string;
+                    colour: string;
+                    active: boolean;
+                    costPrice: string;
+                    sellingPrice: string;
+                    mrp: string;
+                    barcodes: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Authorised catalogue data; decimal prices are strings and cost is owner-only */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid input or scope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Session, scope or owner access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Product/image unavailable */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Duplicate identifier or stale version */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    catalogue_products__id__image: {
+        parameters: {
+            query: {
+                shopId: string;
+                branchId?: string;
+            };
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path: {
+                tenant: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    version: number;
+                    base64: string | null;
+                };
+            };
+        };
+        responses: {
+            /** @description Authorised catalogue data; decimal prices are strings and cost is owner-only */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid input or scope */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Session, scope or owner access denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Product/image unavailable */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Duplicate identifier or stale version */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    catalogue_image: {
+        parameters: {
+            query: {
+                shopId: string;
+                branchId?: string;
+            };
+            header?: never;
+            path: {
+                tenant: string;
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description PNG/JPEG/WebP binary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Image unavailable */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

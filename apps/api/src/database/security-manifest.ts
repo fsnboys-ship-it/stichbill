@@ -83,3 +83,72 @@ export const organisationFunctions = {
     "hash": "71b646440908a26017a10e5d0482b1d2c08be8c15c8583d53471531dfda134d1"
   }
 };
+
+// Task 004: explicit catalogue contracts; original function hashes remain unchanged.
+export const catalogueFunctions = {
+  "catalogue_scope": {
+    "args": "uuid, uuid",
+    "language": "sql",
+    "volatility": "s",
+    "hash": "b2dc089c2b1fedb19c61c1656b6efaec7754d0df966fd16e264fbc9e4c09039a"
+  },
+  "catalogue_read": {
+    "args": "uuid, jsonb",
+    "language": "plpgsql",
+    "volatility": "s",
+    "hash": "47592e0342ea10f4c9b4051292092e67ef6e5c71c8d2c02eb78395e3ca443272"
+  },
+  "catalogue_save": {
+    "args": "uuid, text, uuid, jsonb",
+    "language": "plpgsql",
+    "volatility": "v",
+    "hash": "63e4263c6bf27c7d835bbba43c1987fab18587d68576f9cce00cdcf4935fc926"
+  }
+};
+export const catalogueTables: Record<string,{schema:string;policy:string;select:boolean}> = {
+  "categories": {
+    "schema": "public",
+    "policy": "(auth.catalogue_scope(tenant_id) AND (active OR auth.is_owner(tenant_id)))",
+    "select": true
+  },
+  "brands": {
+    "schema": "public",
+    "policy": "(auth.catalogue_scope(tenant_id) AND (active OR auth.is_owner(tenant_id)))",
+    "select": true
+  },
+  "products": {
+    "schema": "public",
+    "policy": "auth.catalogue_scope(tenant_id, id)",
+    "select": true
+  },
+  "product_shops": {
+    "schema": "public",
+    "policy": "(auth.catalogue_scope(tenant_id, product_id) AND ((shop_id)::text = current_setting('app.catalogue_shop_id'::text, true)) AND (active OR auth.is_owner(tenant_id)))",
+    "select": true
+  },
+  "product_variants": {
+    "schema": "public",
+    "policy": "(auth.catalogue_scope(tenant_id, product_id) AND (active OR auth.is_owner(tenant_id)))",
+    "select": true
+  },
+  "variant_barcodes": {
+    "schema": "public",
+    "policy": "(auth.catalogue_scope(tenant_id, product_id) AND (active OR auth.is_owner(tenant_id)) AND (EXISTS ( SELECT 1\n   FROM public.product_variants v\n  WHERE ((v.tenant_id = variant_barcodes.tenant_id) AND (v.id = variant_barcodes.variant_id)))))",
+    "select": true
+  },
+  "catalogue_prices": {
+    "schema": "public",
+    "policy": "(auth.catalogue_scope(tenant_id, product_id) AND auth.is_owner(tenant_id))",
+    "select": false
+  },
+  "product_images": {
+    "schema": "public",
+    "policy": "(auth.catalogue_scope(tenant_id, product_id) AND (EXISTS ( SELECT 1\n   FROM public.products p\n  WHERE ((p.tenant_id = product_images.tenant_id) AND (p.id = product_images.product_id) AND (p.image_id = product_images.id)))))",
+    "select": true
+  },
+  "catalogue_events": {
+    "schema": "auth",
+    "policy": "false",
+    "select": false
+  }
+};

@@ -44,3 +44,5 @@ Task 001: [Product](docs/PRODUCT_REQUIREMENTS.md), [Architecture](docs/TECHNICAL
 Increment 1 has no password login, cookie/reset flow, organisation write APIs or setup screens yet. Runtime access is read-only and session-validated. The migration runner applies approved local schema explicitly; integration tests apply it only to the isolated test database. Production databases are rejected. Never commit `.env`, `.env.db` or test credential files. No products, inventory or deployment are included. Stop for PM review before the next increment.
 
 Owner authentication and initial business setup are documented in [Task 003 Increment 2](docs/TASK_003_INCREMENT_2_REPORT.md). Local password recovery uses the private ignored `work/local-mailbox/` directory; no external email service is configured. Never share or commit mailbox files.
+
+Product Catalogue Increment 1: use the native [Windows CMD setup and catalogue walkthrough](docs/TASK_004_RUN_WINDOWS_CMD.md). Catalogue data uses PostgreSQL FORCE RLS; images stay in private local storage. See the [implementation and verification report](docs/TASK_004_INCREMENT_1_REPORT.md) for scope and limitations.

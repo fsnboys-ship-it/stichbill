@@ -44,6 +44,16 @@ test('privilege rejection in an exclusively owned disposable database',async t=>
       await provisionLocalDatabase(env);await probeDatabase(db);
     });
     const scenarios=[
+      ...['categories','brands','products','product_shops','product_variants','variant_barcodes','catalogue_prices','product_images'].flatMap(table=>[
+        {name:`catalogue missing FORCE RLS: ${table}`,change:`ALTER TABLE public.${table} NO FORCE ROW LEVEL SECURITY`,undo:`ALTER TABLE public.${table} FORCE ROW LEVEL SECURITY`},
+        {name:`catalogue runtime write: ${table}`,change:`GRANT INSERT ON public.${table} TO ${id(runtimeName)}`,undo:`REVOKE INSERT ON public.${table} FROM ${id(runtimeName)}`},
+      ]),
+      {name:'cost price SELECT grant',change:`GRANT SELECT ON public.catalogue_prices TO ${id(runtimeName)}`,undo:`REVOKE SELECT ON public.catalogue_prices FROM ${id(runtimeName)}`},
+      {name:'catalogue audit SELECT grant',change:`GRANT SELECT ON auth.catalogue_events TO ${id(runtimeName)}`,undo:`REVOKE SELECT ON auth.catalogue_events FROM ${id(runtimeName)}`},
+      {name:'catalogue audit missing FORCE RLS',change:'ALTER TABLE auth.catalogue_events NO FORCE ROW LEVEL SECURITY',undo:'ALTER TABLE auth.catalogue_events FORCE ROW LEVEL SECURITY'},
+      {name:'catalogue extra audit policy',change:`CREATE POLICY unsafe_catalogue ON auth.catalogue_events TO ${id(runtimeName)} USING(true)`,undo:'DROP POLICY unsafe_catalogue ON auth.catalogue_events'},
+      {name:'catalogue command search_path changed',change:'ALTER FUNCTION auth.catalogue_save(uuid,text,uuid,jsonb) SET search_path=public,pg_catalog',undo:'ALTER FUNCTION auth.catalogue_save(uuid,text,uuid,jsonb) SET search_path=pg_catalog'},
+      {name:'catalogue PUBLIC function',change:'GRANT EXECUTE ON FUNCTION auth.catalogue_read(uuid,jsonb) TO PUBLIC',undo:'REVOKE EXECUTE ON FUNCTION auth.catalogue_read(uuid,jsonb) FROM PUBLIC'},
       ...['SUPERUSER','BYPASSRLS','REPLICATION','CREATEROLE','CREATEDB','INHERIT'].map(attribute=>({name:`runtime ${attribute}`,change:`ALTER ROLE ${id(runtimeName)} ${attribute}`,undo:`ALTER ROLE ${id(runtimeName)} NO${attribute}`})),
       {name:'migrator REPLICATION',change:`ALTER ROLE ${id(migratorName)} REPLICATION`,undo:`ALTER ROLE ${id(migratorName)} NOREPLICATION`},
       {name:'direct privileged role membership',change:`GRANT pg_read_all_data TO ${id(runtimeName)}`,undo:`REVOKE pg_read_all_data FROM ${id(runtimeName)}`},

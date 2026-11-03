@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { SqlMigrationProvider } from '../../apps/api/dist/database/migrate.js';
 test('reviewed access migration is discoverable; provider only inspects files', async () => {
-  assert.deepEqual(Object.keys(await new SqlMigrationProvider(resolve('database/migrations')).getMigrations()), ['20261031000100_access_foundation.sql', '20261031000300_function_defaults.sql', '20261103000100_owner_authentication.sql', '20261103000200_organisation_access.sql']);
+  assert.deepEqual(Object.keys(await new SqlMigrationProvider(resolve('database/migrations')).getMigrations()), ['20261031000100_access_foundation.sql', '20261031000300_function_defaults.sql', '20261103000100_owner_authentication.sql', '20261103000200_organisation_access.sql', '20261103000300_product_catalogue.sql']);
 });
 test('provider orders reviewed names and rejects ambiguous naming; no SQL executes', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'stich-migration-test-'));
