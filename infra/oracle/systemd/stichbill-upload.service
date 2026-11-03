@@ -1,0 +1,26 @@
+# UPLOADER HOST ONLY. Disabled until separate host/IAM acceptance is approved.
+[Unit]
+Description=STICH BILL isolated backup uploader
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/stichbill/uploader-isolation-approved.json
+[Service]
+Type=oneshot
+User=stichbill-upload
+Group=stichbill-upload
+WorkingDirectory=/opt/stichbill/current
+EnvironmentFile=/etc/stichbill/uploader.env
+LoadCredential=uploader-isolation.json:/etc/stichbill/uploader-isolation-approved.json
+# This literal fail-closed value must be changed only in an approved activation change.
+ExecStart=/usr/bin/env STICHBILL_ENABLE_UPLOADS=no /usr/local/bin/node infra/oracle/upload-backup.mjs --approved-isolated-uploader
+StateDirectory=stichbill-upload
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/stichbill-upload
+CapabilityBoundingSet=
+RuntimeMaxSec=10min
+TimeoutStopSec=30

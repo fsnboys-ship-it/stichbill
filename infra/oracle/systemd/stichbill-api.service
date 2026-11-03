@@ -1,6 +1,10 @@
 [Unit]
 Description=STICH BILL staging NestJS API
-After=network-online.target postgresql.service
+After=network-online.target postgresql@17-main.service
+Requires=postgresql@17-main.service
+BindsTo=postgresql@17-main.service
+RequiresMountsFor=/srv/stichbill_pgdata
+AssertPathIsMountPoint=/srv/stichbill_pgdata
 Wants=network-online.target
 
 [Service]
@@ -10,6 +14,7 @@ Group=stichbill
 WorkingDirectory=/opt/stichbill/current
 # Runtime file only: never bootstrap, owner or migration credentials.
 EnvironmentFile=/etc/stichbill/staging.env
+ExecStartPre=/usr/local/bin/node apps/api/dist/database/check.js
 ExecStart=/usr/local/bin/node apps/api/dist/main.js
 Restart=on-failure
 RestartSec=5
@@ -23,6 +28,8 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+IPAddressDeny=169.254.169.254/32
+InaccessiblePaths=-/var/lib/stichbill-backup -/srv/stichbill-export
 CapabilityBoundingSet=
 MemoryMax=1G
 TasksMax=128

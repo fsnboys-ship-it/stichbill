@@ -1,37 +1,63 @@
 # Encrypted staging backup and restore procedure
 
-Preparation only; do not run against production. Proposed RPO 24h/RTO 4h, subject to a measured isolated restore drill. Real OCI uploads and SMTP delivery need separately approved resources/credentials and are not tested by local CI.
+Preparation only. No production data, real OCI upload, real SMTP or actual Oracle restore drill is executed by this PR. Proposed RPO 24h/RTO 4h remain unproven until an approved timed off-host drill with actual retained artifacts, keys, network and infrastructure.
 
-## Backup
+## Backup format and publication
 
-Install age and PostgreSQL 17 client tools. Root owns `backup.sh`, recipient list and service configuration. The public age recipient is on the VM; private recovery keys and a recoverable second copy are held off the VM by an approved administrator. Key loss means backup loss. Keep old keys for the full retention of their backups.
+The old two-object archive/checksum upload is replaced. `backup.sh` now ONLY invokes the local producer; it cannot upload. The producer uses Unix peer PostgreSQL access as postgres, streams `pg_dump --format=custom --create` directly into real age encryption, and writes no plaintext dump. All subprocesses must succeed, PGDMP format and age header must match, and file sizes are bounded. Private `.partial-*` directories (0700) are never exportable. A complete artifact is verified, fsynced and atomically renamed to `<uuid>.ready/<uuid>.sbb` (file 0400). SIGKILL/power loss may leave a private partial directory; it is not a ready backup and must not be exported. Alert on producer failure/stale age; clean stale partials only after checking no producer is active.
 
-The supplied oneshot/timer runs pg_dump as local postgres over a Unix socket, covering all tenants and private auth/history tables. FORCE RLS remains enabled. Do not use runtime to dump: it cannot read all required records. `--create` preserves database-level metadata; custom format preserves ownership, grants, policies and function bodies. No owner/ACL stripping is permitted on restore. Dump is streamed directly through age; no plaintext dump is stored. `pipefail` prevents uploading failed/partial exports. Encrypted checksum and archive are uploaded to a private bucket with unique names and no overwrite. OCI storage encryption is additional to age encryption.
+`.sbb` is a documented local envelope: ASCII `STICHBILL-BACKUP-1\n`, one bounded JSON manifest line, then binary age ciphertext. Manifest keys are exactly `version`, `database`, `release`, `sha256` (ciphertext SHA-256) and `cipherBytes`. Database is fixed to stichbill_staging; release is a 40-character reviewed Git SHA. The parser rejects malformed/extra fields, size mismatch, corruption, truncation, symlinks and unsafe owner/modes. No manifest filename/path is executed or used for filesystem traversal. The entire envelope is capped at 1 GiB; exceeding this fails closed and requires a reviewed capacity/design change.
 
-The backup uploader needs object-create only for its approved bucket/prefix, not read/delete or broad tenancy administration. Enforce OS/metadata isolation of that identity from the API before activation; instance-principal privileges otherwise apply to all VM processes. Use a separate administrator identity for retention/deletion and restore. No public bucket, pre-authenticated public URL or static cloud credential in Git.
+Only the separate uploader host from BACKUP_IDENTITY.md may publish. It snapshots an owner-private transferred file, verifies it again and sends ONE conditional single-part object PUT including the whole-object SHA-256 request checksum. Ciphertext and manifest commit together; there is no sidecar object or multipart upload. `If-None-Match: *` prevents overwriting the same stable `staging/<uuid>.sbb` name. No delete/overwrite cleanup is attempted. If a network timeout loses the response after server commit, treat the outcome as UNCERTAIN, retain the source and reconcile with a separate read-only recovery identity. Never assume a failed request means no complete object exists, generate a new name to hide uncertainty, or claim a fake transport proves OCI atomicity.
 
-Record the release SHA, migration checksums/history, PostgreSQL/client version, encryption recipient identifiers and provisioning contract with the backup inventory (no passwords). Application roles are reconstructed from the reviewed contract and secrets manager, not a global role/password dump. Bootstrap role is supplied by the clean server. Retain role credentials separately under access controls; rotate them after recovery. Do not restore unrelated cluster roles.
+SHA-256 detects corruption, not malicious provenance. Age authenticates ciphertext to the recovery key, but anyone knowing a public recipient can encrypt their own content. Trust also depends on the protected producer, pinned read-only SFTP source, approved release inventory and bucket IAM. A compromised producer/uploader or administrator is outside that assurance; independent signed inventory/retention controls are a later strengthening option. Restore only reviewed archives from the trusted source.
 
-Use seven daily and four weekly archives initially. Size compressed exports and retained versions before choosing retention; 11 backups can exceed a small free allowance. Retention automation must distinguish daily/weekly generations and may not delete the last verified backup. Enable version/retention protection where approved and affordable. A same-tenancy bucket does not replace an independently controlled copy. Monitor dump/upload failures, archive age, storage capacity and restoration success. Never run `pg_dump` without reviewing stderr/exit status.
+Key material: public X25519 age recipient on A; private recovery key off A/B in an independently controlled, recoverable store. Key loss means backup loss. Keep old keys for every retained backup. Record release SHA, migration checksums/history, PostgreSQL/client/age versions, recipient IDs and upload receipt/object version in a protected inventory, no passwords. Use seven daily/four weekly generations only after measuring sizes and approving storage. Retention must not delete the last verified backup; producer does not implement retention. Same-tenancy storage is not an independent compromise boundary; maintain another controlled copy before production.
 
-## Restore drill on an isolated host
+## Restore on an isolated PostgreSQL 17 recovery host
 
-1. Obtain approval and isolate a clean PostgreSQL 17 server with outbound SMTP disabled and no application traffic. Do not restore over any existing database. Use the SAME database name (`stichbill_staging`) and role names because the validator and grants derive names from the database.
-2. Download the selected encrypted archive and its checksum to a private mode-0700 directory using a separate recovery identity. Verify the encrypted checksum. Review the inventory/release SHA. Decrypt only in that controlled environment, preferably streaming to pg_restore. Keep the private age key off the application VM.
-3. As the controlled bootstrap administrator, create owner/migrator/runtime roles with EXACT documented attributes and no memberships. Owner is NOLOGIN/NOSUPERUSER; migrator/runtime use fresh independent credentials. Do not grant administrative memberships. Do not create the database yet: the archive's CREATE DATABASE is restored below. If tablespaces were introduced later, this runbook needs review first.
-4. Restore as trusted bootstrap, preserving owner and ACL statements. Example (paths are placeholders, private key is local to recovery host):
+1. Obtain separate execution approval. Block application traffic and SMTP; ensure the intended PostgreSQL 17 cluster is empty of the staging database and all three staging roles. Never restore over the running source. Use the SAME database and role names. A different name will break derived grants/security checks. A second isolated cluster can use a different explicit loopback port. Confirm keys, approved artifact inventory and matching application release before proceeding.
+2. A separate recovery identity downloads the ONE `.sbb` object/version. Use a private owner-only recovery directory (0700), umask 077 and file 0600, no symlinks. Match the object/version/release against the protected inventory. There is no separate checksum file to execute with `sha256sum -c`; the verifier parses the embedded checksum itself. Do not accept object ETag as a SHA-256 digest.
+3. On the recovery host only, prepare the local decrypted dump WITHOUT executing SQL:
 
-```sh
-set -o pipefail
-age --decrypt --identity /secure/offline-recovery-key selected.dump.age |
-  pg_restore --exit-on-error --create --dbname=postgres
-```
+   ```sh
+   umask 077
+   STICHBILL_ENABLE_RESTORE_PREPARATION=isolated-staging-only \
+   STICHBILL_BUNDLE=/private/recovery/<uuid>.sbb \
+   STICHBILL_RECOVERY_IDENTITY=/private/keys/recovery.agekey \
+   STICHBILL_RECOVERY_DIR=/private/recovery \
+     node infra/oracle/decrypt-backup.mjs
+   ```
 
-Use local peer authentication or private credential files, never passwords in arguments. Run only reviewed trusted archives: restoring SQL executes code. `--create` cannot be combined with a single-transaction restore; on failure, keep the partially restored instance isolated and investigate/recreate it explicitly. Never use `--clean` against an existing database, `--no-owner` or `--no-acl` to hide errors.
+   The key and parent directory must be private and owned by the recovery user. The helper snapshots input, verifies manifest/size/checksum, completes age authentication, then releases a mode-0600 PGDMP archive in a private directory. Any corruption/decryption/subprocess error removes that output. This corrects the old `age | pg_restore` command: do NOT start executing restore SQL before decryption has succeeded completely. Protected plaintext is allowed only on the isolated recovery host; securely remove it and the temporary key copy after the drill, considering filesystem/snapshot retention.
+4. As controlled bootstrap superuser over local peer authentication, run the reviewed role script with explicit intent:
 
-5. Verify database owner, roles, schema/function ownership, EXACT grants/grantors, default privileges, all eight FORCE RLS policies and migration history against the chosen release. Run the repository readiness checker as runtime with private staging configuration. Reconstructing a database under a different name or default owner is not accepted. Do not run fresh provisioning over a restored contract to fix failures.
-6. Through a reviewed administrator maintenance transaction, invalidate all restored identity/membership sessions and outstanding password-reset tokens before opening access. This prevents pre-backup tokens becoming valid again. Test this explicitly. Rotate runtime/migrator secrets and update only private configuration. Do not alter function bodies/security manifests or disable RLS for recovery.
-7. Start the matching application release in isolation. Verify owner login, business/shop/branch reads, a synthetic write, cross-tenant denial and cashier scopes. Verify database persistence across restart and that runtime cannot read auth tables or assume owner/bootstrap. SMTP remains blocked until recovery links use the approved canonical origin and delivery is reviewed.
-8. Record total recovery time and recovered backup timestamp. Require review before any DNS/traffic switch. Test the complete drill monthly and after security/migration changes. Daily logical dumps do not provide point-in-time recovery; introduce reviewed WAL archiving if the approved RPO becomes shorter.
+   ```sh
+   PGOPTIONS='-c stichbill.restore_roles_approved=isolated-staging-restore' \
+     psql --dbname=postgres --set=ON_ERROR_STOP=1 --file=infra/oracle/restore-roles.sql
+   ```
 
-Volume snapshots are supplemental; an untested crash-consistent snapshot is not proof of PostgreSQL recovery. OS administrators, the bootstrap superuser and encryption-key holders are trusted privileged actors. No claim is made that RLS contains their compromise.
+   It transactionally rejects pre-existing roles/database, creates the exact NOLOGIN/non-superuser owner and restricted LOGIN migrator/runtime with PASSWORD NULL, and grants NO memberships or database access. Set independent generated 48-hex application passwords privately using psql `\password` or an approved secret procedure; never put passwords in CLI arguments, Git or CI. There are no restored global role/password scripts. Do not give either application role membership in bootstrap/owner. Do not create the staging database or run fresh provisioning: `pg_restore --create` restores it and its original owner/ACLs from the archive.
+5. After reviewing the trusted archive/list and verifying the target/roles, restore the fully authenticated local dump:
+
+   ```sh
+   pg_restore --exit-on-error --create --dbname=postgres /private/recovery/.decrypt-<id>/verified.dump
+   ```
+
+   Execute as controlled bootstrap superuser via private local authentication; use PostgreSQL 17 tools. `--dbname=postgres` is the initial maintenance connection; data goes into stichbill_staging as named in the archive. Keep all owners, grants, grantors/default ACLs and functions. Never add `--no-owner`, `--no-acl`, `--clean`, migrations or permissive grants to get past errors. `--create` cannot be single-transaction: failure may leave a partial database. Exit immediately and keep that entire target quarantined. Explicitly review/drop/recreate only that disposable failed target before retry; no automatic destruction/repair is supplied. Restore archives execute trusted-source SQL. [PostgreSQL 17 restore behavior](https://www.postgresql.org/docs/17/app-pgrestore.html)
+6. Verify exact database owner/role attributes/memberships, database ACL grantors, object/function ownership, default privileges, all eight FORCE RLS policies, function hashes and migration history against the selected release. Run the existing readiness checker as runtime using private staging config/new runtime password. Do not use bootstrap readiness to bypass runtime checks. An ownership/grantor mismatch is a failed restore, not permission to relax validation.
+7. Before opening any access, invalidate restored sessions and reset tokens as the approved recovery administrator:
+
+   ```sh
+   PGOPTIONS='-c stichbill.recovery_approved=isolated-staging-restore' \
+     psql --dbname=stichbill_staging --set=ON_ERROR_STOP=1 --file=infra/oracle/invalidate-restored-sessions.sql
+   ```
+
+   The gated transaction sets revoked_at on global identity sessions and membership sessions, and used_at on outstanding password resets. This is maintenance SQL, NOT a migration or startup step. Verify old session/reset tokens fail and a new valid login succeeds. Rotate/update private application credentials; owner stays NOLOGIN. A failed transaction must be rolled back and reviewed while target remains quarantined.
+8. With SMTP still blocked, verify owner login, shop/branch reads/writes, staff scopes, foreign-tenant denial, restart persistence and inability of runtime to read auth tables or assume owner/bootstrap. Review logs for redaction. Record measured RPO/RTO and results before any DNS/traffic cutover approval. Only the approved live SMTP acceptance test can reopen recovery delivery.
+
+## Automated checks versus a real OCI drill
+
+`npm run test:backup` is Linux-only operations verification with real age and disposable PostgreSQL 17 containers. It checks encryption round-trip, authenticated-decryption failure, tampered/truncated bundles, private modes, symlink rejection, failed dump/encryption, default-disabled uploads, and a single verified fake PUT with failure/no cleanup-write behavior. Its PostgreSQL test executes the SAME role and session-invalidation scripts, verifies the existing exact readiness contract after pg_dump/pg_restore, checks data and old-token invalidation/new login, and refuses an overwrite attempt. Existing Windows application/DB/browser workflows are unchanged.
+
+These automated tests use synthetic keys/data and a fake upload transport. They do NOT prove real OCI IAM denial, Object Storage transfer/retention, SSH export, key-custody recovery, Oracle Arm, systemd boot/mount behavior, public TLS, SMTP delivery or the timed real off-host restore. Those remain explicit acceptance gates. Daily logical backups do not provide point-in-time recovery; WAL archiving requires a separately reviewed design. Volume snapshots supplement but never replace these checks.

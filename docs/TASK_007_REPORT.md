@@ -24,7 +24,7 @@ Staging uses one canonical HTTPS origin and the existing Secure/HttpOnly/SameSit
 - `infra/oracle/README.md`, `BACKUP_RESTORE.md`: provisioning, migration, network, release and encrypted recovery runbooks.
 - `infra/oracle/nginx-staging.conf`, `nginx-api.conf`: HTTPS/proxy templates.
 - `infra/oracle/staging.env.example`: placeholders only; actual secrets stay outside Git.
-- `infra/oracle/backup.sh`: encrypted dump pipeline and private-bucket upload template.
+- `infra/oracle/backup.sh`: local-only encrypted backup entry point; cloud upload has been removed from the database host.
 - `infra/oracle/systemd/stichbill-api.service`, `stichbill-backup.service`, `stichbill-backup.timer`: service/timer templates.
 - `tests/integration/staging.test.mjs`, `tests/unit/staging.test.mjs`: fresh PostgreSQL 17 owner/provisioning/escalation, origin/proxy/auth, configuration, SMTP TLS and redaction tests.
 - `docs/TASK_007_REPORT.md`: this report.
@@ -37,7 +37,7 @@ SMTP tests include a real local plaintext SMTP server refusing STARTTLS: no AUTH
 
 ## Remaining execution gates and risks
 
-Review/approve this draft before merge. Separately approve Oracle provisioning/deployment, region/domain/costs, real SMTP credentials/sender DNS and tester policy. Validate the pinned toolchain on Arm. Verify systemd paths, certificate renewal and persistent PostgreSQL mount dependencies on the actual VM. A single VM is not HA and free resources may be reclaimed. Isolate backup instance-principal metadata privileges from the API OS user before enabling uploads. Keep decryption keys off-host; prove complete role/ACL-preserving restore and invalidate restored sessions/reset tokens before reopening access. RPO/RTO are targets, not tested guarantees. Production still needs email ownership verification policy, retention/housekeeping, operational ownership, independent backups and dependency/runtime review.
+Review/approve this draft before merge. Separately approve Oracle provisioning/deployment, region/domain/costs, real SMTP credentials/sender DNS and tester policy. Validate the pinned toolchain on Arm. Verify systemd paths, certificate renewal and persistent PostgreSQL mount dependencies on the actual VM. A single VM is not HA and free resources may be reclaimed. Use the required separate uploader host and prove API-host IAM denial before a separately reviewed upload activation; same-VM Unix users are not an OCI principal boundary. Keep decryption keys off-host; prove complete role/ACL-preserving restore and invalidate restored sessions/reset tokens before reopening access. RPO/RTO are targets, not tested guarantees. Production still needs email ownership verification policy, retention/housekeeping, operational ownership, independent backups and dependency/runtime review.
 
 Stop for review. No merge, cloud provisioning, purchase, deployment or production data change is included.
 
@@ -50,3 +50,22 @@ Stop for review. No merge, cloud provisioning, purchase, deployment or productio
 - `bash -n infra/oracle/backup.sh` and `git diff --check`: passed.
 - `npm audit --json`: 18 moderate findings, zero low/high/critical; count unchanged from the inherited baseline. No broad dependency remediation is included.
 - Existing SQL migrations and `security-manifest.ts`: unchanged.
+
+
+## Focused operational-security review of 9e9983c
+
+Findings: a same-VM instance principal was available to other VM processes; uploading archive/checksum as separate objects could leave a half-published pair; the recovery pipeline could start SQL before full decryption completed; and generic postgresql.service dependencies did not guarantee a running PostgreSQL 17 cluster or mounted data volume.
+
+Fixes:
+
+- Removed OCI from the database-host backup job. The producer runs network-isolated and produces only verified local ciphertext. BACKUP_IDENTITY.md selects a separate uploader host with exact-instance dynamic-group matching, create-only bucket permissions, one-way pinned read-only SFTP transfer, explicit API-principal denial tests and a root-controlled expiring acceptance record. The uploader service is HARD-DISABLED, overrides any environment-file enable flag and has no timer/install target. No real IAM denial was tested and no upload was enabled.
+- Added a bounded single-object envelope containing encrypted dump, exact manifest and SHA-256. Atomic local ready publication, private permissions, no-follow file access, private upload snapshots, one conditional single-part PUT and a server-side SHA-256 request checksum replace two-object publication. No overwrite/delete or automatic retry hides uncertain outcomes.
+- Recovery verifies checksum, completes real age authentication and checks PGDMP before releasing a private local restore file. New gated manual restore-roles.sql creates only the exact roles, without database/grant reconstruction; pg_restore --create preserves those from the archive. New gated invalidate-restored-sessions.sql revokes both session layers and consumes old reset tokens. These are recovery procedures, NOT application migrations/startup steps.
+- API and backup now depend on the real Ubuntu PostgreSQL 17 cluster. A mountpoint/PG_VERSION drop-in prevents fallback onto the boot filesystem and binds service lifetime to the data mount; API gets a runtime-role readiness precheck. Added a validated-reload certificate deploy hook and explicit Arm, mount/reboot, TLS renewal and SMTP acceptance checklist.
+- Added Linux operations tests using real age and separate disposable PostgreSQL 17 containers, plus local certificate-verified Nginx/TLS routing. Linux hosted CI installs age and runs these tests; existing native Windows application/database/browser workflows are unchanged. No actual cloud credentials or SMTP secrets are added.
+
+Focused files: .github/workflows/ci.yml; package.json; infra/oracle/{backup.sh,backup.mjs,create-backup.mjs,upload-backup.mjs,decrypt-backup.mjs,BACKUP_IDENTITY.md,BACKUP_RESTORE.md,DEPLOYMENT_CHECKS.md,README.md,restore-roles.sql,invalidate-restored-sessions.sql,renew-certificate.sh}; infra/oracle/systemd/{stichbill-api.service,stichbill-backup.service,stichbill-upload.service,postgresql-data.conf}; tests/operations/{backup.test.mjs,restore.test.mjs,nginx.test.mjs}; this report.
+
+Unclosed acceptance gates: actual OCI IAM/canary/SSH isolation; actual Object Storage upload/retrieval/retention and independent key custody; timed off-host OCI restore; Oracle Arm toolchain; real systemd boot/mount failure/persistence; public DNS/ACME renewal; provider SMTP delivery. A separate uploader may add cost/capacity and needs approval. Checksums are not signed provenance; trusted producer/inventory/IAM remain assumptions. Admin/uploader compromise, single-VM app availability, manual retention, the 1 GiB envelope cap, dependency findings and unmeasured RPO/RTO remain explicit risks. No production-ready/OCI restore claim is made. Existing migrations, checksums, FORCE RLS, SECURITY DEFINER manifest and application role grants are unchanged.
+
+Focused review local results: npm run verify passed (lint, type checks/builds, 41 unit and 118 PostgreSQL integration/security tests, OpenAPI drift); existing browser suite 4/4 passed; Linux test:backup operations suite 10/10 passed with real age v1.2.1 locally, synthetic key material, separate disposable PostgreSQL 17 and local certificate-verified Nginx. The operations tests do not contact OCI or a real SMTP provider. Workflow validation, shell syntax and whitespace checks passed. Hosted Linux (including operations) and unchanged native Windows CI results are recorded in the updated PR/conversation after the focused commit. The root-only uploader acceptance record is handed to the unprivileged service through systemd LoadCredential; it is not made group/world-readable to solve access.
