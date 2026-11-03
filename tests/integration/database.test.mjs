@@ -43,9 +43,9 @@ test('access foundation against real PostgreSQL runtime role', async t => {
       await probeDatabase(db); await assert.rejects(()=>probeDatabase(migration));
       for (const query of ['create table public.forbidden_runtime_table(id int)','select * from auth.identity_sessions','select * from public.migration_history','set role stichbill_test_migrator']) await assert.rejects(()=>sql.raw(query).execute(db),{code:'42501'});
     });
-    await t.test('all eight tenant tables enable and force RLS',async()=>{
+    await t.test('all public tenant tables enable and force RLS',async()=>{
       const {rows}=await sql`select relname,relrowsecurity,relforcerowsecurity from pg_class where relnamespace='public'::regnamespace and relkind='r' and relname<>'migration_history'`.execute(migration);
-      assert.equal(rows.length,8); assert.ok(rows.every(row=>row.relrowsecurity && row.relforcerowsecurity));
+      assert.equal(rows.length,16); assert.ok(rows.every(row=>row.relrowsecurity && row.relforcerowsecurity));
     });
     await t.test('missing context fails closed and one identity safely accesses two tenants',async()=>{
       assert.deepEqual((await readShops(db)).rows,[]);
@@ -107,12 +107,13 @@ test('access foundation against real PostgreSQL runtime role', async t => {
         await writeFile(join(dir,'20261031000300_function_defaults.sql'),await readFile(resolve('database/migrations/20261031000300_function_defaults.sql'),'utf8'));
         await writeFile(join(dir,'20261103000100_owner_authentication.sql'),await readFile(resolve('database/migrations/20261103000100_owner_authentication.sql'),'utf8'));
         await writeFile(join(dir,'20261103000200_organisation_access.sql'),await readFile(resolve('database/migrations/20261103000200_organisation_access.sql'),'utf8'));
+        await writeFile(join(dir,'20261103000300_product_catalogue.sql'),await readFile(resolve('database/migrations/20261103000300_product_catalogue.sql'),'utf8'));
         await writeFile(join(dir,name),original+'\n-- tampered'); await assert.rejects(()=>applyMigrations(migration,dir),/checksum/);
         await writeFile(join(dir,name),original);
-        await writeFile(join(dir,'20261103000300_failure.sql'),'CREATE TABLE public.rollback_fixture(id int); SELECT 1/0;');
+        await writeFile(join(dir,'20261104000100_failure.sql'),'CREATE TABLE public.rollback_fixture(id int); SELECT 1/0;');
         await assert.rejects(()=>applyMigrations(migration,dir),{code:'22012'});
         assert.equal((await sql`select to_regclass('public.rollback_fixture') as name`.execute(migration)).rows[0].name,null);
-        assert.equal((await sql`select count(*)::int as count from public.migration_history`.execute(migration)).rows[0].count,4);
+        assert.equal((await sql`select count(*)::int as count from public.migration_history`.execute(migration)).rows[0].count,5);
       } finally {await rm(dir,{recursive:true});}
     });
     await t.test('real API readiness accepts runtime and rejects migrator credentials',async()=>{

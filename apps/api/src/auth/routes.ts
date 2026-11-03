@@ -1,3 +1,4 @@
+import { catalogueRoutes } from '../catalogue/routes.js';
 import { organisationRoutes } from '../organisation/routes.js';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { timingSafeEqual } from 'node:crypto';
@@ -52,6 +53,7 @@ function configureAuthRoutes(server: FastifyInstance, db: Kysely<Database>, deli
     }
   });
   organisationRoutes(server, db, session);
+  catalogueRoutes(server, db, session);
   const rotate = (reply: FastifyReply, value: string) => {
     const csrf = secret();
     reply.header('Set-Cookie', [cookie('__Host-stich-session', value, 28800), cookie('__Host-stich-csrf', csrf, 28800)]);

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { sql, type Kysely } from 'kysely';
 import type { Database } from './connection.js';
-import { functionHashes, authFunctions, organisationFunctions } from './security-manifest.js';
+import { functionHashes, authFunctions, organisationFunctions, catalogueFunctions, catalogueTables } from './security-manifest.js';
 
 export const tenantTables = ['tenants','memberships','shops','branches','roles','membership_roles','membership_scopes','membership_sessions'];
 type Grant = { role: string; privilege: string; grantable: boolean; grantor: string };
@@ -45,7 +45,7 @@ export async function inspectSecurity(db: Kysely<Database>): Promise<Snapshot> {
     ) objects,names WHERE owner IN (SELECT oid FROM pg_roles WHERE rolname IN(runtime,migrator)) AND schema NOT IN ('auth','public')) AS "unexpectedOwnership",
     (SELECT coalesce(jsonb_agg(jsonb_build_object('name',nspname,'owner',pg_get_userbyid(nspowner),'acl',coalesce(a.acl,'[]'))),'[]') FROM pg_namespace n LEFT JOIN acls a ON a.kind='schema' AND a.object=n.oid WHERE nspname !~ '^pg_' AND nspname<>'information_schema') AS schemas,
     (SELECT coalesce(jsonb_agg(jsonb_build_object('schema',n.nspname,'name',c.relname,'kind',c.relkind,'owner',pg_get_userbyid(c.relowner),'rls',c.relrowsecurity,'force',c.relforcerowsecurity,'acl',coalesce(a.acl,'[]'),'columnAcl',EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=c.oid AND attacl IS NOT NULL))),'[]') FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace LEFT JOIN acls a ON a.kind='table' AND a.object=c.oid WHERE n.nspname !~ '^pg_' AND n.nspname<>'information_schema') AS relations,
-    (SELECT coalesce(jsonb_agg(jsonb_build_object('table',c.relname,'name',p.polname,'command',p.polcmd,'permissive',p.polpermissive,'roles',ARRAY(SELECT CASE WHEN r=0 THEN 'PUBLIC' ELSE pg_get_userbyid(r) END FROM unnest(p.polroles) r),'using',pg_get_expr(p.polqual,p.polrelid),'check',pg_get_expr(p.polwithcheck,p.polrelid))),'[]') FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public') AS policies,
+    (SELECT coalesce(jsonb_agg(jsonb_build_object('table',c.relname,'name',p.polname,'command',p.polcmd,'permissive',p.polpermissive,'roles',ARRAY(SELECT CASE WHEN r=0 THEN 'PUBLIC' ELSE pg_get_userbyid(r) END FROM unnest(p.polroles) r),'using',pg_get_expr(p.polqual,p.polrelid),'check',pg_get_expr(p.polwithcheck,p.polrelid))),'[]') FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','auth')) AS policies,
     (SELECT coalesce(jsonb_agg(jsonb_build_object('schema',n.nspname,'name',p.proname,'args',oidvectortypes(p.proargtypes),'owner',pg_get_userbyid(p.proowner),'definer',p.prosecdef,'language',l.lanname,'volatility',p.provolatile,'settings',p.proconfig,'body',p.prosrc,'acl',coalesce(a.acl,'[]'),'executable',CASE WHEN to_regrole(names.runtime) IS NULL THEN false ELSE has_function_privilege(names.runtime,p.oid,'EXECUTE') END)),'[]') FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_language l ON l.oid=p.prolang CROSS JOIN names LEFT JOIN acls a ON a.kind='function' AND a.object=p.oid WHERE (n.nspname !~ '^pg_' AND n.nspname<>'information_schema') OR p.prosecdef) AS functions,
     (SELECT coalesce(jsonb_agg(jsonb_build_object('schema',CASE WHEN x.defaclnamespace=0 THEN '*' ELSE x.defaclnamespace::regnamespace::text END,'kind',x.defaclobjtype,'acl',coalesce(a.acl,'[]'))),'[]') FROM pg_default_acl x LEFT JOIN acls a ON a.kind='default' AND a.object=x.oid WHERE x.defaclrole IN (SELECT oid FROM pg_roles,names WHERE rolname IN (runtime,migrator))) AS defaults
     FROM pg_database d WHERE datname=current_database()`.execute(db);
@@ -93,30 +93,39 @@ export function validateSecurity(s: Snapshot, mode: 'provision'|'ready', expecte
     requireSafe(mode==='provision' && s.schemas.length===1 && s.functions.length===0 && s.defaults.length===0 && s.policies.length===0,'unmigrated database');
     return 'provisioned';
   }
+  const hasCatalogue=s.relations.some(t=>t.schema==='public' && t.name==='products');
+  requireSafe(mode!=='ready' || hasCatalogue,'catalogue migration missing');
   const hasOrganisation=s.relations.some(t=>t.schema==='auth' && t.name==='access_events');
   requireSafe(mode!=='ready' || hasOrganisation,'organisation migration missing');
   const hasAuth=s.relations.some(t=>t.schema==='auth' && t.name==='password_resets');
   requireSafe(mode!=='ready' || hasAuth,'authentication migration missing');
-  const expectedTables=[...(hasOrganisation?['auth.access_events']:[]),...(hasAuth?['auth.password_resets','auth.attempt_buckets']:[]),...tenantTables.map(t=>`public.${t}`),'public.migration_history','auth.identity_accounts','auth.identity_sessions'];
+  const expectedTables=[...(hasCatalogue?Object.entries(catalogueTables).map(([name,t])=>`${t.schema}.${name}`):[]),...(hasOrganisation?['auth.access_events']:[]),...(hasAuth?['auth.password_resets','auth.attempt_buckets']:[]),...tenantTables.map(t=>`public.${t}`),'public.migration_history','auth.identity_accounts','auth.identity_sessions'];
   const tables=s.relations.filter(t=>t.kind==='r');
   requireSafe(tables.length===expectedTables.length && tables.every(t=>expectedTables.includes(`${t.schema}.${t.name}`)),'protected table set');
   requireSafe(s.schemas.length===2 && s.relations.every(r=>r.owner===migrator && ['r','i'].includes(r.kind)),'object ownership or kind');
   for(const table of tables) {
+    const catalogue=hasCatalogue && catalogueTables[table.name]?.schema===table.schema ? catalogueTables[table.name] : undefined;
     const scoped=table.schema==='public' && tenantTables.includes(table.name);
-    requireSafe(aclMatches(table.acl,migrator,scoped?{[runtime]:['SELECT']}:{}) && !table.columnAcl,'table or column ACL');
-    requireSafe(!scoped || (table.rls && table.force),'FORCE RLS');
+    requireSafe(aclMatches(table.acl,migrator,(scoped || catalogue?.select)?{[runtime]:['SELECT']}:{}) && !table.columnAcl,'table or column ACL');
+    requireSafe(!(scoped || catalogue) || (table.rls && table.force),'FORCE RLS');
   }
-  requireSafe(s.policies.length===tenantTables.length*2,'policy count');
+  requireSafe(s.policies.length===(tenantTables.length+(hasCatalogue?Object.keys(catalogueTables).length:0))*2,'policy count');
   for(const table of tenantTables) {
     const admin=s.policies.find(p=>p.table===table && p.name==='migration_access');
     const read=s.policies.find(p=>p.table===table && p.name==='runtime_read');
     requireSafe(admin?.command==='*' && admin.permissive && admin.roles.length===1 && admin.roles[0]===migrator && admin.using==='true' && admin.check==='true','maintenance policy');
     requireSafe(read?.command==='r' && read.permissive && read.roles.length===1 && read.roles[0]===runtime && read.check===null && normal(read.using)===normal(readExpressions[table]!),'runtime policy');
   }
-  requireSafe(s.functions.length===3+(hasOrganisation?Object.keys(organisationFunctions).length:0)+(hasAuth?Object.keys(authFunctions).length:0),'function allowlist');
+  if(hasCatalogue)for(const [table,contract] of Object.entries(catalogueTables)){
+    const admin=s.policies.find(p=>p.table===table && p.name==='migration_access');
+    const read=s.policies.find(p=>p.table===table && p.name==='runtime_read');
+    requireSafe(admin?.command==='*' && admin.permissive && admin.roles.length===1 && admin.roles[0]===migrator && admin.using==='true' && admin.check==='true','catalogue maintenance policy');
+    requireSafe(read?.command==='r' && read.permissive && read.roles.length===1 && read.roles[0]===runtime && read.check===null && normal(read.using)===normal(contract.policy),'catalogue runtime policy');
+  }
+  requireSafe(s.functions.length===3+(hasCatalogue?Object.keys(catalogueFunctions).length:0)+(hasOrganisation?Object.keys(organisationFunctions).length:0)+(hasAuth?Object.keys(authFunctions).length:0),'function allowlist');
   const signatures:Record<string,string>={resolve_context:'text, uuid',can_access:'uuid, uuid, uuid',is_owner:'uuid'};
   for(const f of s.functions) {
-    const extra = hasAuth ? ({...authFunctions,...(hasOrganisation?organisationFunctions:{})} as Record<string,{args:string;language:string;volatility:string;hash:string}>)[f.name] : undefined;
+    const extra = hasAuth ? ({...authFunctions,...(hasOrganisation?organisationFunctions:{}),...(hasCatalogue?catalogueFunctions:{})} as Record<string,{args:string;language:string;volatility:string;hash:string}>)[f.name] : undefined;
     requireSafe(f.schema==='auth' && f.owner===migrator && f.definer && f.language===(extra?.language ?? 'sql') && f.volatility===(extra?.volatility ?? 's') && f.args===(extra?.args ?? signatures[f.name]) && JSON.stringify(f.settings)===JSON.stringify(['search_path=pg_catalog']) && createHash('sha256').update(f.body).digest('hex')===(extra?.hash ?? functionHashes[f.name]) && aclMatches(f.acl,migrator,{[runtime]:['EXECUTE']}) && f.executable,'function definition or ACL');
   }
   // Provisioning accepts the exact immutable legacy baseline for the forward migration.

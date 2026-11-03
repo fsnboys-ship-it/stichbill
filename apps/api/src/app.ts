@@ -3,6 +3,7 @@ import { Module, type DynamicModule } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { addCatalogueContract } from './catalogue/contract.js';
 import { addAuthContract } from './auth/contract.js';
 import { registerAuthRoutes, type ResetDelivery } from './auth/routes.js';
 import { deliverLocalReset } from './auth/reset-delivery.js';
@@ -25,6 +26,7 @@ export async function createApp(config: AppConfig, options: { probe?: () => Prom
   app.setGlobalPrefix('api/v1');
   const document = SwaggerModule.createDocument(app, new DocumentBuilder().setTitle('STICH BILL API').setVersion('0.0.0').setDescription('Local development health and owner authentication API.').build());
   addAuthContract(document);
+  addCatalogueContract(document);
   SwaggerModule.setup('api/docs', app, document);
   return { app, document };
 }

@@ -4,7 +4,9 @@ import { parse } from 'yaml';
 const workflow = parse(await readFile('.github/workflows/ci.yml', 'utf8'));
 assert.ok('push' in workflow.on && 'pull_request' in workflow.on);
 assert.equal(workflow.permissions.contents, 'read');
-assert.ok(workflow.jobs.linux.services.postgres);
+assert.equal(workflow.jobs.linux.services,undefined);
+assert.ok(workflow.jobs.linux.steps.some(step=>step.run==='node scripts/start-ci-postgres.mjs'));
+assert.ok(!/docker/i.test(JSON.stringify(workflow)));
 assert.equal(workflow.jobs.windows['runs-on'], 'windows-2025');
 const scripts = JSON.parse(await readFile('package.json', 'utf8')).scripts;
 for (const job of Object.values(workflow.jobs)) {

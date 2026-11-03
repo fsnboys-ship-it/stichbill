@@ -1,3 +1,4 @@
+import { Catalogue } from './Catalogue';
 import { Organisation } from './Organisation';
 import { useEffect, useState, type FormEvent } from 'react';
 type View = 'login' | 'register' | 'recover' | 'reset' | 'setup' | 'business';
@@ -17,12 +18,16 @@ export function OwnerAccess() {
       }
     }
     window.addEventListener('hashchange', receiveResetLink);
+    const recovering=location.hash.startsWith('#reset=');
     if (location.hash.startsWith('#reset=')) history.replaceState(null, '', location.pathname);
     const controller = new AbortController();
     void fetch('/api/v1/auth/csrf', { signal: controller.signal }).then(r => {
       if (!r.ok) throw new Error();
       return r.json() as Promise<{csrf: string}>;
-    }).then(data => setCsrf(data.csrf)).catch(() => {
+    }).then(async data => {
+      if(!recovering){const response=await fetch('/api/v1/auth/session',{signal:controller.signal});if(response.ok){const session=await response.json() as {businesses:Business[]};if(!controller.signal.aborted){setBusinesses(session.businesses);setView(session.businesses.length?'business':'setup');}}}
+      if(!controller.signal.aborted)setCsrf(data.csrf);
+    }).catch(() => {
       if (!controller.signal.aborted) setMessage('Cannot connect. Please refresh and try again.');
     });
     return () => { controller.abort(); window.removeEventListener('hashchange', receiveResetLink); };
@@ -74,7 +79,7 @@ export function OwnerAccess() {
       {message && <p role="status" className="rounded-lg bg-slate-100 p-3 text-sm leading-6">{message}</p>}
       <button disabled={busy || !csrf} className="min-h-12 w-full rounded-lg bg-indigo-700 px-4 py-3 font-semibold text-white disabled:opacity-50">{busy ? 'Please wait…' : ({login:'Sign in',register:'Create account',recover:'Send recovery instructions',reset:'Change password',setup:'Create business',business:'Sign out'})[view]}</button>
     </form>
-    {view === 'business' && businesses.map(b => <Organisation key={b.id} tenant={b.id} csrf={csrf} />)}
+    {view === 'business' && businesses.map(b => <div key={b.id}><Organisation tenant={b.id} csrf={csrf} /><Catalogue tenant={b.id} csrf={csrf}/></div>)}
     {['login', 'register', 'recover'].includes(view) && <nav aria-label="Account access" className="mt-4 flex flex-wrap gap-2">
       {view !== 'login' && <button disabled={busy} onClick={() => change('login')} className="min-h-11 px-2 text-indigo-700">Sign in</button>}
       {view !== 'register' && <button disabled={busy} onClick={() => change('register')} className="min-h-11 px-2 text-indigo-700">Create owner account</button>}
