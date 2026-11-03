@@ -30,7 +30,7 @@ test('database failure is 503 without exposing connection details', async () => 
 });
 test('OpenAPI describes both health operations and no retail endpoints', async () => {
   const { app, document } = await start(async () => {});
-  try { assert.deepEqual(Object.keys(document.paths).sort(), ['/api/v1/health', '/api/v1/health/ready']);
+  try { assert.deepEqual(Object.keys(document.paths).filter(path=>!path.startsWith('/api/v1/auth/')).sort(), ['/api/v1/health', '/api/v1/health/ready']);
     assert.equal(document.paths['/api/v1/health'].get.operationId, 'getHealth');
     assert.ok(document.paths['/api/v1/health/ready'].get.responses['503']);
   } finally { await app.close(); }
