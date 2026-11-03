@@ -62,3 +62,24 @@ export const authFunctions = {
     "hash": "9bca0d70a307c9bca8b47eeadecc0d6e45c45c67543ae5bff3ae222c308179a2"
   }
 };
+
+export const organisationFunctions = {
+  "organisation_read": {
+    "args": "uuid",
+    "language": "plpgsql",
+    "volatility": "s",
+    "hash": "8dcc22c896657a7cf21a59cc4299f3e39ee1d872c6c383727a4fc468e65f398d"
+  },
+  "save_location": {
+    "args": "uuid, text, uuid, uuid, text, text, text, text, boolean",
+    "language": "plpgsql",
+    "volatility": "v",
+    "hash": "115da2941f846606ff0d96295f131b1cea0c2010166240a3efb73831d8b775b0"
+  },
+  "save_staff": {
+    "args": "uuid, uuid, text, text, text, boolean, jsonb",
+    "language": "plpgsql",
+    "volatility": "v",
+    "hash": "71b646440908a26017a10e5d0482b1d2c08be8c15c8583d53471531dfda134d1"
+  }
+};

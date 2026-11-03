@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import pg from 'pg';
-import { resolve } from 'node:path';
+import { mkdtemp, readdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { createDatabase,probeDatabase } from '../../apps/api/dist/database/connection.js';
 import { validateLocalDatabaseUrl } from '../../apps/api/dist/config.js';
 import { applyMigrations } from '../../apps/api/dist/database/migrate.js';
@@ -29,7 +31,15 @@ test('privilege rejection in an exclusively owned disposable database',async t=>
       await assert.rejects(()=>probeDatabase(db),/Unsafe database configuration/);
       await provisionLocalDatabase(env);
     });
-    await applyMigrations(migrator,resolve('database/migrations'));
+    const legacy=await mkdtemp(join(tmpdir(),'stich-legacy-'));
+    try {
+      for(const file of (await readdir('database/migrations')).filter(n=>n.endsWith('.sql') && n<'20261103000200')) await writeFile(join(legacy,file),await readFile(resolve('database/migrations',file),'utf8'));
+      await applyMigrations(migrator,legacy);
+      await admin.query("SET ROLE "+id(migratorName)+"; INSERT INTO public.tenants(id,name) VALUES('00000000-0000-4000-8000-000000000001','Preserved tenant'); INSERT INTO public.shops(tenant_id,id,code,name) VALUES('00000000-0000-4000-8000-000000000001','00000000-0000-4000-8000-000000000002','LEGACY','Preserved shop'); RESET ROLE");
+      await applyMigrations(migrator,resolve('database/migrations'));
+      assert.deepEqual((await admin.query("SELECT name,address,contact FROM public.shops WHERE code='LEGACY'")).rows,[{name:'Preserved shop',address:'',contact:''}]);
+    } finally { await rm(legacy,{recursive:true}); }
+
     await t.test('least-privilege configuration passes provisioning and readiness',async()=>{
       await provisionLocalDatabase(env);await probeDatabase(db);
     });
@@ -44,7 +54,7 @@ test('privilege rejection in an exclusively owned disposable database',async t=>
       {name:'database CREATE grant',change:`GRANT CREATE ON DATABASE ${id(name)} TO ${id(runtimeName)}`,undo:`REVOKE CREATE ON DATABASE ${id(name)} FROM ${id(runtimeName)}`},
       {name:'schema CREATE grant',change:`GRANT CREATE ON SCHEMA auth TO ${id(runtimeName)}`,undo:`REVOKE CREATE ON SCHEMA auth FROM ${id(runtimeName)}`},
       {name:'authentication SELECT grant',change:`GRANT SELECT ON auth.identity_sessions TO ${id(runtimeName)}`,undo:`REVOKE SELECT ON auth.identity_sessions FROM ${id(runtimeName)}`},
-      ...['password_resets','attempt_buckets'].map(table=>({name:`new auth table grant: ${table}`,change:`GRANT SELECT ON auth.${table} TO ${id(runtimeName)}`,undo:`REVOKE SELECT ON auth.${table} FROM ${id(runtimeName)}`})),
+      ...['password_resets','attempt_buckets','access_events'].map(table=>({name:`new auth table grant: ${table}`,change:`GRANT SELECT ON auth.${table} TO ${id(runtimeName)}`,undo:`REVOKE SELECT ON auth.${table} FROM ${id(runtimeName)}`})),
       {name:'changed onboarding function',change:'ALTER FUNCTION auth.onboard(text,text,text) SET search_path=public,pg_catalog',undo:'ALTER FUNCTION auth.onboard(text,text,text) SET search_path=pg_catalog'},
       {name:'PUBLIC reset function',change:'GRANT EXECUTE ON FUNCTION auth.reset_password(text,text) TO PUBLIC',undo:'REVOKE EXECUTE ON FUNCTION auth.reset_password(text,text) FROM PUBLIC'},
       {name:'authentication column grant',change:`GRANT SELECT(token_hash) ON auth.identity_sessions TO ${id(runtimeName)}`,undo:`REVOKE SELECT(token_hash) ON auth.identity_sessions FROM ${id(runtimeName)}`},
