@@ -9,7 +9,7 @@ type Role = { name: string; super: boolean; bypass: boolean; replication: boolea
 type Relation = { schema: string; name: string; kind: string; owner: string; rls: boolean; force: boolean; acl: Grant[]; columnAcl: boolean };
 type Policy = { table: string; name: string; command: string; permissive: boolean; roles: string[]; using: string | null; check: string | null };
 type FunctionInfo = { schema: string; name: string; args: string; owner: string; definer: boolean; language: string; volatility: string; settings: string[] | null; body: string; acl: Grant[]; executable: boolean };
-type Snapshot = { database: string; currentUser: string; admin: string; adminSafe: boolean; dbAcl: Grant[]; roles: Role[]; memberships: number; ownedDatabases: number; unexpectedSystemPrivileges: number; unexpectedOwnership: number;
+type Snapshot = { database: string; currentUser: string; admin: string; adminSafe: boolean; ownerRoles: Role[]; ownerMemberships: number; ownerDatabases: number; ownerObjects: number; ownerGrants: number; dbAcl: Grant[]; roles: Role[]; memberships: number; ownedDatabases: number; unexpectedSystemPrivileges: number; unexpectedOwnership: number;
   schemas: {name:string;owner:string;acl:Grant[]}[]; relations: Relation[]; policies: Policy[]; functions: FunctionInfo[]; defaults: {schema:string;kind:string;acl:Grant[]}[] };
 
 // Static catalog SQL only. The same implementation is used before provisioning and by readiness.
@@ -28,6 +28,12 @@ export async function inspectSecurity(db: Kysely<Database>): Promise<Snapshot> {
     ), acls AS (SELECT kind,object,jsonb_agg(jsonb_build_object('role',CASE WHEN grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(grantee) END,'privilege',privilege_type,'grantable',is_grantable,'grantor',pg_get_userbyid(grantor))) AS acl FROM grants GROUP BY kind,object)
     SELECT current_database() AS database,current_user AS "currentUser",pg_get_userbyid(d.datdba) AS admin,
     (SELECT rolsuper AND rolcanlogin FROM pg_roles WHERE oid=d.datdba) AS "adminSafe",
+    (SELECT coalesce(jsonb_agg(jsonb_build_object('name',rolname,'super',rolsuper,'bypass',rolbypassrls,'replication',rolreplication,'createRole',rolcreaterole,'createDb',rolcreatedb,'inherit',rolinherit,'login',rolcanlogin,'settings',rolconfig)),'[]') FROM pg_roles WHERE oid=d.datdba) AS "ownerRoles",
+    (SELECT count(*)::int FROM pg_auth_members WHERE member=d.datdba OR roleid=d.datdba) AS "ownerMemberships",
+    (SELECT count(*)::int FROM pg_database WHERE datdba=d.datdba) AS "ownerDatabases",
+    (SELECT count(*)::int FROM (SELECT relowner AS owner FROM pg_class UNION ALL SELECT proowner FROM pg_proc UNION ALL SELECT nspowner FROM pg_namespace) objects WHERE owner=d.datdba) AS "ownerObjects",
+    (SELECT count(*)::int FROM grants WHERE grantee=d.datdba AND NOT (kind='db' AND object=d.oid)) +
+    (SELECT count(*)::int FROM pg_default_acl WHERE defaclrole=d.datdba) AS "ownerGrants",
     (SELECT acl FROM acls WHERE kind='db' AND object=d.oid) AS "dbAcl",
     (SELECT coalesce(jsonb_agg(jsonb_build_object('name',rolname,'super',rolsuper,'bypass',rolbypassrls,'replication',rolreplication,'createRole',rolcreaterole,'createDb',rolcreatedb,'inherit',rolinherit,'login',rolcanlogin,'settings',rolconfig)),'[]') FROM pg_roles,names WHERE rolname IN (runtime,migrator)) AS roles,
     (SELECT count(*)::int FROM pg_auth_members m WHERE m.member IN (SELECT oid FROM pg_roles,names WHERE rolname IN (runtime,migrator)) OR m.roleid IN (SELECT oid FROM pg_roles,names WHERE rolname IN (runtime,migrator))) AS memberships,
@@ -72,14 +78,25 @@ for(const table of ['memberships','membership_roles','membership_scopes','member
   const id=table==='memberships'?'id':'membership_id';
   readExpressions[table]=`(auth.can_access(tenant_id) AND (auth.is_owner(tenant_id) OR ((${id})::text = current_setting('app.membership_id'::text, true))))`;
 }
-export function validateSecurity(s: Snapshot, mode: 'provision'|'ready', expectedAdmin?: string, allowLegacyDefaults=false): 'fresh'|'provisioned'|'schema' {
+export function validateSecurity(s: Snapshot, mode: 'provision'|'ready'|'bootstrap', expectedAdmin?: string, allowLegacyDefaults=false): 'fresh'|'provisioned'|'schema' {
   const runtime=`${s.database}_runtime`, migrator=`${s.database}_migrator`;
-  requireSafe(s.adminSafe && ![runtime,migrator].includes(s.admin) && (!expectedAdmin || s.admin===expectedAdmin),'administrator ownership');
+  const isolatedOwner = s.admin === `${s.database}_owner`;
+  if (isolatedOwner) {
+    const owner = s.ownerRoles[0];
+    requireSafe(s.ownerRoles.length === 1 && owner && !owner.login && !owner.super && !owner.bypass &&
+      !owner.replication && !owner.createRole && !owner.createDb && !owner.inherit && !owner.settings?.length &&
+      s.ownerMemberships === 0 && s.ownerDatabases === 1 && s.ownerObjects === 0 && s.ownerGrants === 0, 'NOLOGIN owner attributes or authority');
+    requireSafe(!expectedAdmin || s.admin === expectedAdmin, 'owner identity');
+  } else {
+    requireSafe((/^stichbill_(dev|test(?:_security_[a-f0-9]{8})?)$/.test(s.database) ||
+      (mode === 'bootstrap' && s.database === 'stichbill_staging' && !!expectedAdmin && s.roles.length === 0 && s.relations.length === 0)) &&
+      s.adminSafe && ![runtime,migrator].includes(s.admin) && (!expectedAdmin || s.admin===expectedAdmin),'administrator ownership');
+  }
   requireSafe(mode!=='ready' || s.currentUser===runtime,'runtime identity');
   requireSafe(s.memberships===0 && s.ownedDatabases===0 && s.unexpectedSystemPrivileges===0 && s.unexpectedOwnership===0,'role membership or database ownership');
   for(const r of s.roles) requireSafe(!r.super && !r.bypass && !r.replication && !r.createRole && !r.createDb && !r.inherit && r.login && !r.settings?.length,'role attributes');
   if(s.roles.length===0) {
-    requireSafe(mode==='provision' && s.relations.length===0 && s.functions.length===0 && s.defaults.length===0 && s.schemas.length===1 && s.schemas[0]?.name==='public','fresh database only');
+    requireSafe((mode==='provision' || mode==='bootstrap') && s.relations.length===0 && s.functions.length===0 && s.defaults.length===0 && s.schemas.length===1 && s.schemas[0]?.name==='public','fresh database only');
     requireSafe(aclMatches(s.dbAcl,s.admin,{PUBLIC:['CONNECT','TEMPORARY']}),'fresh database ACL');
     const schema=s.schemas[0]!;
     requireSafe(['pg_database_owner',s.admin].includes(schema.owner) && aclMatches(schema.acl,schema.owner,{PUBLIC:['USAGE']}),'fresh schema ACL');

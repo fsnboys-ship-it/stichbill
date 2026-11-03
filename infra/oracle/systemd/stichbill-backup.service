@@ -1,0 +1,26 @@
+[Unit]
+Description=STICH BILL local encrypted backup producer (NO cloud access)
+After=postgresql@17-main.service
+Requires=postgresql@17-main.service
+BindsTo=postgresql@17-main.service
+RequiresMountsFor=/srv/stichbill_pgdata
+AssertPathIsMountPoint=/srv/stichbill_pgdata
+[Service]
+Type=oneshot
+User=postgres
+Group=postgres
+EnvironmentFile=/etc/stichbill/backup.env
+ExecStart=/bin/bash /opt/stichbill/current/infra/oracle/backup.sh
+StateDirectory=stichbill-backup
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateNetwork=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/stichbill-backup
+CapabilityBoundingSet=
+RuntimeMaxSec=10min
+TimeoutStopSec=30
+KillMode=control-group

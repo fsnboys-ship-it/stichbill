@@ -5,7 +5,7 @@ import { type Migration, type MigrationProvider } from 'kysely/migration';
 import type { Kysely } from 'kysely';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
-import { validateLocalDatabaseUrl } from '../config.js';
+import { validateLocalDatabaseUrl, validateStagingDatabaseUrl } from '../config.js';
 import { createDatabase, type Database } from './connection.js';
 export class SqlMigrationProvider implements MigrationProvider {
   constructor(private readonly directory: string) {}
@@ -45,14 +45,17 @@ export async function applyMigrations(db: Kysely<Database>, directory: string): 
   });
 }
 async function main() {
-  if (process.env.ALLOW_MIGRATIONS !== 'true' || !process.argv.includes('--approve-local-migrations')) {
+  const staging = process.env.APP_ENV === 'staging';
+  if (staging && (process.env.APPROVE_STAGING_MIGRATIONS !== 'stichbill_staging' || !process.argv.includes('--approve-staging-migrations'))) throw new Error('Explicit staging migration approval required');
+  if (process.env.ALLOW_MIGRATIONS !== 'true' || (!staging && !process.argv.includes('--approve-local-migrations'))) {
     throw new Error('Migration execution requires ALLOW_MIGRATIONS=true and --approve-local-migrations for reviewed local/test schema only.');
   }
-  const url = validateLocalDatabaseUrl(process.env.MIGRATION_DATABASE_URL ?? '');
-  const db = createDatabase(url);
+  if (process.env.APP_ENV && !['development','test','staging'].includes(process.env.APP_ENV)) throw new Error('Unsupported migration environment');
+  const url = staging ? validateStagingDatabaseUrl(process.env.MIGRATION_DATABASE_URL ?? '', 'migrator') : validateLocalDatabaseUrl(process.env.MIGRATION_DATABASE_URL ?? '');
+  const db = createDatabase(url, staging ? 'staging' : 'development', 'migrator');
   try {
     await applyMigrations(db, resolve('database/migrations'));
-    console.log('Reviewed local migrations completed.');
+    console.log(staging ? 'Reviewed staging migrations completed.' : 'Reviewed local migrations completed.');
   } finally { await db.destroy(); }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main().catch(() => { console.error('Migration failed. Check local configuration, migration integrity and role separation. No credentials are logged.'); process.exitCode = 1; });

@@ -35,7 +35,8 @@
     "setup:db-env": "node scripts/setup-db-env.mjs",
     "db:provision": "npm run build --workspace @stichbill/api && node --env-file=.env --env-file=.env.db scripts/provision-local-db.mjs",
     "db:migrate:local": "npm run build --workspace @stichbill/api && node --env-file=.env --env-file=.env.db scripts/migrate-local.mjs",
-    "db:test:setup": "npm run build --workspace @stichbill/api && node --env-file=.env.db scripts/setup-test-db.mjs"
+    "db:test:setup": "npm run build --workspace @stichbill/api && node --env-file=.env.db scripts/setup-test-db.mjs",
+    "test:backup": "node --env-file-if-exists=.env.test --env-file-if-exists=.env.test.db --test tests/operations/backup.test.mjs tests/operations/restore.test.mjs tests/operations/nginx.test.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
