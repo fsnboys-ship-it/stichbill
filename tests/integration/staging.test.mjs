@@ -12,6 +12,7 @@ import { readConfig } from '../../apps/api/dist/config.js';
 
 test('fresh PostgreSQL 17 staging provisioning, owner separation and HTTPS auth', async t => {
   const base = new URL(process.env.ADMIN_DATABASE_URL);
+  if (!base.port) base.port = '5432';
   assert.equal(base.hostname, '127.0.0.1'); assert.ok(Number(base.port) >= 1024); assert.equal(base.pathname, '/stichbill_test');
   const controller = new pg.Client({connectionString: base.href}); await controller.connect();
   const bootstrap = 'stichbill_bootstrap_' + randomBytes(4).toString('hex');
@@ -106,7 +107,7 @@ test('fresh PostgreSQL 17 staging provisioning, owner separation and HTTPS auth'
       await assert.rejects(()=>provisionStagingDatabase({...env,ADMIN_DATABASE_URL:migratorUrl.href}));
     });
     await t.test('canonical HTTPS origin, secure cookies and trusted proxy address',async()=>{
-      const config=readConfig({...env,APP_ORIGIN:'https://staging.example.test',SMTP_HOST:'smtp.example.test',SMTP_PORT:'587',SMTP_USER:'test',SMTP_PASSWORD:'synthetic-test-only',SMTP_FROM:'reset@example.test'});
+      const config=readConfig({APP_ENV:'staging',DATABASE_URL:runtimeUrl.href,APP_ORIGIN:'https://staging.example.test',SMTP_HOST:'smtp.example.test',SMTP_PORT:'587',SMTP_USER:'test',SMTP_PASSWORD:'synthetic-test-only',SMTP_FROM:'reset@example.test'});
       ({app}=await createApp(config,{logger:false,deliverReset:async()=>{}}));
       const server=app.getHttpAdapter().getInstance();
       server.get('/test-address',async request=>({ip:request.ip}));

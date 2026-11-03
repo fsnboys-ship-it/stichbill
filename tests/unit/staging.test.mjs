@@ -6,7 +6,7 @@ import {createSmtpDelivery} from '../../apps/api/dist/auth/smtp-delivery.js';
 const env={APP_ENV:'staging',DATABASE_URL:'postgresql://stichbill_staging_runtime:'+ 'a'.repeat(48)+'@127.0.0.1:5432/stichbill_staging',APP_ORIGIN:'https://staging.example.test',SMTP_HOST:'smtp.example.test',SMTP_PORT:'587',SMTP_USER:'synthetic-user',SMTP_PASSWORD:'synthetic-only',SMTP_FROM:'reset@example.test'};
 test('strict staging configuration accepts only dedicated target and full recovery configuration',()=>{
   assert.equal(readConfig(env).APP_ENV,'staging');
-  for(const change of [{APP_ENV:'production'},{ALLOW_MIGRATIONS:'true'},{SMTP_PASSWORD:''},{SMTP_PORT:'25'},{SMTP_FROM:'Name\r\nBcc:bad@example.test'},{SMTP_HOST:'smtp.test/path'},{APP_ORIGIN:'http://staging.example.test'}])assert.throws(()=>readConfig({...env,...change}));
+  for(const change of [{ADMIN_DATABASE_URL:'must-not-reach-runtime'},{MIGRATION_DATABASE_URL:'must-not-reach-runtime'},{POSTGRES_PASSWORD:'must-not-reach-runtime'},{APP_ENV:'production'},{ALLOW_MIGRATIONS:'true'},{SMTP_PASSWORD:''},{SMTP_PORT:'25'},{SMTP_FROM:'Name\r\nBcc:bad@example.test'},{SMTP_HOST:'smtp.test/path'},{APP_ORIGIN:'http://staging.example.test'}])assert.throws(()=>readConfig({...env,...change}));
 });
 for(const origin of ['http://staging.example.test','https://localhost','https://127.0.0.1','https://staging.example.test/','https://staging.example.test/path','https://user:pass@staging.example.test','https://staging.example.test:8443','https://staging.example.test?x=1','https://staging.example.test#x','https://STAGING.example.test'])test(`rejects noncanonical origin ${origin}`,()=>assert.throws(()=>canonicalOrigin(origin)));
 test('staging database URLs reject remote hosts, wrong roles, names and connection overrides',()=>{

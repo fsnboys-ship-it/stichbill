@@ -31,6 +31,8 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   const result = schema.safeParse(env);
   if (!result.success) throw new Error(`Invalid environment fields: ${result.error.issues.map(i => i.path.join('.')).join(', ')}`);
   if (result.data.APP_ENV === 'staging') {
+    if (['ADMIN_DATABASE_URL','MIGRATION_DATABASE_URL','POSTGRES_PASSWORD','POSTGRES_USER','POSTGRES_DB','POSTGRES_PORT'].some(key => env[key] !== undefined))
+      throw new Error('Staging runtime must not contain privileged database configuration');
     validateStagingDatabaseUrl(result.data.DATABASE_URL, 'runtime');
     canonicalOrigin(result.data.APP_ORIGIN ?? '');
     if (!result.data.SMTP_HOST || !/^[a-z0-9.-]+$/i.test(result.data.SMTP_HOST) ||

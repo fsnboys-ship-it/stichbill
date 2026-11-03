@@ -22,7 +22,7 @@ Allow TCP 443 to approved testers; port 80 for ACME/HTTPS redirect. Restrict SSH
 
 ## Private configuration
 
-Render `staging.env.example` privately to `/etc/stichbill/staging.env`, root-owned mode 0600, consumed by systemd. Generate independent 24-byte hex passwords for runtime/migrator. Bootstrap must use a separate password of at least 24 characters; provisioning rejects shared credentials across all three connections. Never put credential values in Git, command arguments, logs or PRs. The runtime file must contain only the shown runtime keys, no ADMIN_DATABASE_URL/MIGRATION_DATABASE_URL. Avoid the local `.env` bootstrap helpers for staging.
+Render `staging.env.example` privately to `/etc/stichbill/staging.env`, root-owned mode 0600, consumed by systemd. Generate independent 24-byte hex passwords for runtime/migrator. Bootstrap must use a separate password of at least 24 characters; provisioning rejects shared credentials across all three connections. Never put credential values in Git, command arguments, logs or PRs. The runtime file must contain only the shown runtime keys. Staging API startup rejects ADMIN_DATABASE_URL, MIGRATION_DATABASE_URL and POSTGRES_* bootstrap credentials/settings. Avoid the local `.env` bootstrap helpers for staging.
 
 Create separate root-only provisioning and migration environment files outside the repository:
 
