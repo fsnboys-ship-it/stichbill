@@ -48,7 +48,7 @@ Executed locally against an isolated **native PostgreSQL17.11** cluster on loopb
 | Catalogue API/RLS/owner/cashier/validation/images | PASS,11 integration tests including parent |
 | OpenAPI generated contract parity | PASS |
 | Browser/component form integration | PASS —5/5, including mobile catalogue forms, images, edits, persistence and cashier view |
-| Hosted Linux/native Windows CI | Pending PR run |
+| Hosted Linux/native Windows CI | PASS —Linux and native Windows, [run41683050538](https://github.com/fsnboys-ship-it/stichbill/actions/runs/41683050538), application commit `7f1d3f3` |
 | Windows CMD manual walkthrough on a user PC | NOT RUN in this Linux workspace; commands documented |
 | Production/cloud acceptance | NOT RUN; outside this local increment |
 
@@ -61,3 +61,5 @@ No stock, billing, purchases, customer, offline, GST, hardware or subscription f
 The existing main local database-owner model is preserved; the unmerged Task007 NOLOGIN staging design requires separate integration/review later. Real SMTP provider delivery and real cloud restore drills remain staging acceptance gates from Task007, not claims made by this increment. Product prices are common across assigned shops; per-shop pricing is not implemented.
 
 Follow [the exact Windows CMD setup and walkthrough](TASK_004_RUN_WINDOWS_CMD.md). No seeded user passwords or real credentials are committed. Application verification in the workspace does not mean it is running on the user's PC or published online.
+
+Hosted verification on `7f1d3f3455f8c78c18d0dc6862c27aba3b791716` completed successfully on both platforms, including browser tests. The initial hosted attempt exposed an omitted lockfile commit (corrected immediately) and the Ubuntu default repository lacking PostgreSQL17 (fixed using official PGDG packages with verified signing-key fingerprint). The linked final run passes. This report update changes documentation only; PR checks track any subsequent head run. Workspace frontend HTTP200 and API `/api/v1/health/ready` HTTP200/database up were also verified with development runtime credentials.
