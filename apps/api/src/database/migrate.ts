@@ -43,10 +43,13 @@ export async function applyMigrations(db: Kysely<Database>, directory: string): 
       const checksum = createHash('sha256').update(content).digest('hex');
       const previous = applied.rows.find(row => row.version === name);
       if (previous && previous.checksum !== checksum) throw new Error('Applied migration checksum changed');
+      if(previous){
+        if((previous.execution_mode===null)!==(previous.execution_checksum===null))throw new Error('Incomplete execution provenance');
+        if(previous.execution_mode!==null && !['original','stich_auth_v1'].includes(previous.execution_mode))throw new Error('Unknown execution provenance');
+      }
       const executable=await migrationSource(name,content,previous?previous.execution_mode==='stich_auth_v1':namespaced);
       if(previous){
-        if(previous.execution_checksum && previous.execution_checksum!==sha256(executable.sql))throw new Error('Applied execution checksum changed');
-        if(previous.execution_mode && !['original','stich_auth_v1'].includes(previous.execution_mode))throw new Error('Unknown execution provenance');
+        if(previous.execution_checksum!==null && previous.execution_checksum!==sha256(executable.sql))throw new Error('Applied execution checksum changed');
         continue;
       }
       if (applied.rows.some(row => row.version > name)) throw new Error('Out-of-order migration rejected');
