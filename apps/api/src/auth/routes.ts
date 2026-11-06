@@ -34,11 +34,11 @@ function configureAuthRoutes(server: FastifyInstance, db: Kysely<Database>, deli
   });
   // Dummy verification uses the same cost as a real account, without a per-request hash.
   const dummy = hashPassword(secret());
-  const sessionRows = async (request: FastifyRequest) => (await sql<{identity_id: string; tenant_id: string | null; business_name: string | null}>`select * from auth.session_info(${digest(session(request))})`.execute(db)).rows;
+  const sessionRows = async (request: FastifyRequest) => (await sql<{identity_id: string; tenant_id: string | null; business_name: string | null}>`select * from stich_auth.session_info(${digest(session(request))})`.execute(db)).rows;
   const limited = async (request: FastifyRequest, address: string, operation: string) => {
     // Do not trust forwarded IP headers. PostgreSQL buckets coordinate all API processes.
-    const ip = (await sql<{allowed: boolean}>`select auth.throttle(${digest(operation + ':ip:' + request.ip)},40) as allowed`.execute(db)).rows[0]?.allowed;
-    const account = (await sql<{allowed: boolean}>`select auth.throttle(${digest(operation + ':account:' + address)},5) as allowed`.execute(db)).rows[0]?.allowed;
+    const ip = (await sql<{allowed: boolean}>`select stich_auth.throttle(${digest(operation + ':ip:' + request.ip)},40) as allowed`.execute(db)).rows[0]?.allowed;
+    const account = (await sql<{allowed: boolean}>`select stich_auth.throttle(${digest(operation + ':account:' + address)},5) as allowed`.execute(db)).rows[0]?.allowed;
     return ip && account;
   };
   server.addHook('onRequest', async (request, reply) => {
@@ -70,7 +70,7 @@ function configureAuthRoutes(server: FastifyInstance, db: Kysely<Database>, deli
     const { email: address, password: plain } = parsed.data;
     if (!await limited(request, address, 'register')) return reply.code(429).send(generic);
     const value = secret(), encoded = await hashPassword(plain);
-    const ok = (await sql<{ok: boolean}>`select auth.register_owner(${address},${encoded},${digest(value)}) as ok`.execute(db)).rows[0]?.ok;
+    const ok = (await sql<{ok: boolean}>`select stich_auth.register_owner(${address},${encoded},${digest(value)}) as ok`.execute(db)).rows[0]?.ok;
     // Same public response/cookie shape for duplicate registration; unknown session cannot access anything.
     const csrf = rotate(reply, value);
     void ok; // Existence intentionally has no effect on the public result.
@@ -81,11 +81,11 @@ function configureAuthRoutes(server: FastifyInstance, db: Kysely<Database>, deli
     if (!parsed.success) return reply.code(400).send(generic);
     const { email: address, password: plain } = parsed.data;
     if (!await limited(request, address, 'login')) return reply.code(429).send(generic);
-    const stored = (await sql<{password_hash: string | null}>`select * from auth.credentials(${address})`.execute(db)).rows[0]?.password_hash;
+    const stored = (await sql<{password_hash: string | null}>`select * from stich_auth.credentials(${address})`.execute(db)).rows[0]?.password_hash;
     const valid = await verifyPassword(plain, stored ?? await dummy);
     if (!valid || !stored) return reply.code(401).send(generic);
     const value = secret();
-    if (!(await sql<{ok: boolean}>`select auth.login(${address},${stored},${digest(value)}) as ok`.execute(db)).rows[0]?.ok) return reply.code(401).send(generic);
+    if (!(await sql<{ok: boolean}>`select stich_auth.login(${address},${stored},${digest(value)}) as ok`.execute(db)).rows[0]?.ok) return reply.code(401).send(generic);
     return { csrf: rotate(reply, value) };
   });
   server.get('/api/v1/auth/session', async (request, reply) => {
@@ -96,7 +96,7 @@ function configureAuthRoutes(server: FastifyInstance, db: Kysely<Database>, deli
   server.post('/api/v1/auth/onboard', async (request, reply) => {
     const parsed = z.object({ businessName: z.string().trim().min(1).max(160), ownerName: z.string().trim().min(1).max(160) }).strict().safeParse(request.body);
     if (!parsed.success) return reply.code(400).send(generic);
-    const result = (await sql<{id: string | null}>`select auth.onboard(${digest(session(request))},${parsed.data.businessName},${parsed.data.ownerName}) as id`.execute(db)).rows[0]?.id;
+    const result = (await sql<{id: string | null}>`select stich_auth.onboard(${digest(session(request))},${parsed.data.businessName},${parsed.data.ownerName}) as id`.execute(db)).rows[0]?.id;
     if (!result) return reply.code(409).send(generic);
     return { businessId: result };
   });
@@ -110,7 +110,7 @@ function configureAuthRoutes(server: FastifyInstance, db: Kysely<Database>, deli
     } catch { return reply.code(403).send(generic); }
   });
   server.post('/api/v1/auth/logout', async (request, reply) => {
-    await sql`select auth.logout(${digest(session(request))})`.execute(db);
+    await sql`select stich_auth.logout(${digest(session(request))})`.execute(db);
     reply.header('Set-Cookie', [cookie('__Host-stich-session', '', 0), cookie('__Host-stich-csrf', '', 0)]);
     return { message: 'Signed out.' };
   });
@@ -119,7 +119,7 @@ function configureAuthRoutes(server: FastifyInstance, db: Kysely<Database>, deli
     if (!parsed.success) return reply.code(400).send(generic);
     if (!await limited(request, parsed.data.email, 'recover')) return reply.code(429).send(generic);
     const value = secret();
-    const ok = (await sql<{ok: boolean}>`select auth.request_reset(${parsed.data.email},${digest(value)}) as ok`.execute(db)).rows[0]?.ok;
+    const ok = (await sql<{ok: boolean}>`select stich_auth.request_reset(${parsed.data.email},${digest(value)}) as ok`.execute(db)).rows[0]?.ok;
     // Delivery errors and existence are never exposed, nor are tokens passed to a logger.
     if (ok) { try { await deliverReset(parsed.data.email, value); } catch { /* generic response */ } }
     return { message: 'If an account can be recovered, recovery instructions will be sent.' };
@@ -129,7 +129,7 @@ function configureAuthRoutes(server: FastifyInstance, db: Kysely<Database>, deli
     if (!parsed.success) return reply.code(400).send(generic);
     if (!await limited(request, request.ip, 'reset')) return reply.code(429).send(generic);
     const encoded = await hashPassword(parsed.data.password);
-    const ok = (await sql<{ok: boolean}>`select auth.reset_password(${digest(parsed.data.token)},${encoded}) as ok`.execute(db)).rows[0]?.ok;
+    const ok = (await sql<{ok: boolean}>`select stich_auth.reset_password(${digest(parsed.data.token)},${encoded}) as ok`.execute(db)).rows[0]?.ok;
     if (!ok) return reply.code(400).send(generic);
     reply.header('Set-Cookie', [cookie('__Host-stich-session', '', 0), cookie('__Host-stich-csrf', '', 0)]);
     return { message: 'Password changed. Sign in with your new password.' };

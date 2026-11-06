@@ -17,7 +17,7 @@ test('mobile owner registration, setup, sign-out, sign-in and password recovery'
   const setup = new pg.Client({ connectionString: url }); await setup.connect();
   try {
     const keys = ['login', 'register', 'recover', 'reset'].flatMap(op => [op + ':ip:127.0.0.1', op + ':account:127.0.0.1']).map(value => createHash('sha256').update(value).digest('hex'));
-    await setup.query('DELETE FROM auth.attempt_buckets WHERE key_hash=ANY($1::text[])', [keys]);
+    await setup.query('DELETE FROM stich_auth.attempt_buckets WHERE key_hash=ANY($1::text[])', [keys]);
   } finally { await setup.end(); }
   await page.setViewportSize({ width: 360, height: 740 });
   try {
@@ -104,20 +104,20 @@ test('mobile owner registration, setup, sign-out, sign-in and password recovery'
     const client = new pg.Client({ connectionString: url }); await client.connect();
     try {
       await client.query('BEGIN');
-      const { rows } = await client.query('SELECT id FROM auth.identity_accounts WHERE normalised_email=$1', [email]);
+      const { rows } = await client.query('SELECT id FROM stich_auth.identity_accounts WHERE normalised_email=$1', [email]);
       if (rows[0]) {
         const identity = rows[0].id as string;
         const tenants = await client.query('SELECT tenant_id FROM public.memberships WHERE identity_id=$1', [identity]);
         for (const tenant of tenants.rows) {
-          await client.query('DELETE FROM auth.access_events WHERE tenant_id=$1',[tenant.tenant_id]);
+          await client.query('DELETE FROM stich_auth.access_events WHERE tenant_id=$1',[tenant.tenant_id]);
           for (const table of ['membership_sessions', 'membership_roles', 'membership_scopes', 'branches', 'shops', 'memberships', 'roles']) await client.query(`DELETE FROM public.${table} WHERE tenant_id=$1`, [tenant.tenant_id]);
           await client.query('DELETE FROM public.tenants WHERE id=$1', [tenant.tenant_id]);
         }
-        for (const table of ['password_resets', 'identity_sessions']) await client.query(`DELETE FROM auth.${table} WHERE identity_id=$1`, [identity]);
-        await client.query('DELETE FROM auth.identity_accounts WHERE id=$1', [identity]);
+        for (const table of ['password_resets', 'identity_sessions']) await client.query(`DELETE FROM stich_auth.${table} WHERE identity_id=$1`, [identity]);
+        await client.query('DELETE FROM stich_auth.identity_accounts WHERE id=$1', [identity]);
       }
-      await client.query('DELETE FROM auth.identity_sessions WHERE identity_id IN (SELECT id FROM auth.identity_accounts WHERE normalised_email=$1)',[staffEmail]);
-      await client.query('DELETE FROM auth.identity_accounts WHERE normalised_email=$1',[staffEmail]);
+      await client.query('DELETE FROM stich_auth.identity_sessions WHERE identity_id IN (SELECT id FROM stich_auth.identity_accounts WHERE normalised_email=$1)',[staffEmail]);
+      await client.query('DELETE FROM stich_auth.identity_accounts WHERE normalised_email=$1',[staffEmail]);
       await client.query('COMMIT');
     } finally { await client.end(); }
   }

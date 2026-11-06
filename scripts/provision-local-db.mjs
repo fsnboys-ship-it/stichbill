@@ -4,7 +4,9 @@ import { resolve } from 'node:path';
 import { validateLocalDatabaseUrl } from '../apps/api/dist/config.js';
 import { createDatabase } from '../apps/api/dist/database/connection.js';
 import { accessMigrationChecksum } from '../apps/api/dist/database/security-manifest.js';
-import { inspectSecurity, validateSecurity } from '../apps/api/dist/database/security.js';
+import { inspectSecurity as inspectCurrent, validateSecurity as validateCurrent } from '../apps/api/dist/database/security.js';
+
+import {inspectSecurity as inspectLegacy,validateSecurity as validateLegacy} from '../apps/api/dist/database/legacy-security.js';
 
 export async function provisionLocalDatabase(env=process.env) {
   const urls=['ADMIN_DATABASE_URL','MIGRATION_DATABASE_URL','DATABASE_URL'].map(key=>new URL(validateLocalDatabaseUrl(env[key] ?? '')));
@@ -17,6 +19,8 @@ export async function provisionLocalDatabase(env=process.env) {
     await db.transaction().execute(async trx=>{
       await sql`select pg_advisory_xact_lock(731003,1),pg_advisory_xact_lock(731003,2)`.execute(trx);
       await sql`set local search_path=pg_catalog`.execute(trx);
+      const legacySchema=(await sql`select exists(select 1 from pg_namespace where nspname='auth' and nspowner=to_regrole(current_database()||'_migrator')) and to_regnamespace('stich_auth') is null as present`.execute(trx)).rows[0].present;
+      const inspectSecurity=legacySchema?inspectLegacy:inspectCurrent,validateSecurity=legacySchema?validateLegacy:validateCurrent;
       const snapshot=await inspectSecurity(trx);
       // Only the exact immutable pre-correction history may enter the legacy upgrade path.
       let legacy=false;

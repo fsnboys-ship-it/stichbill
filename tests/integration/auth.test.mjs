@@ -30,18 +30,18 @@ test('owner authentication and onboarding through real HTTP handlers and Postgre
     await send('csrf');
     await t.test('CSRF blocks missing, foreign origin and mismatched tokens before mutation',async()=>{
       for(const headers of [{'x-csrf-token':''},{origin:'https://evil.example'},{origin:''}])assert.equal((await send('register',{email:address,password:plain},headers)).response.statusCode,403);
-      assert.equal((await sql`select count(*)::int as n from auth.identity_accounts where normalised_email=${address}`.execute(admin)).rows[0].n,0);
+      assert.equal((await sql`select count(*)::int as n from stich_auth.identity_accounts where normalised_email=${address}`.execute(admin)).rows[0].n,0);
     });
     await t.test('registration uses opaque secure cookies and no credential/token in response',async()=>{
       const {response,data}=await send('register',{email:address,password:plain});assert.equal(response.statusCode,200);
       for(const c of response.cookies){assert.equal(c.httpOnly,true);assert.equal(c.secure,true);assert.equal(c.sameSite,'Strict');assert.equal(c.path,'/');}
       assert.ok(!JSON.stringify(data).includes(plain));
-      assert.notEqual(jar['__Host-stich-session'],(await sql`select token_hash from auth.identity_sessions s join auth.identity_accounts a on a.id=s.identity_id where normalised_email=${address}`.execute(admin)).rows[0].token_hash);
+      assert.notEqual(jar['__Host-stich-session'],(await sql`select token_hash from stich_auth.identity_sessions s join stich_auth.identity_accounts a on a.id=s.identity_id where normalised_email=${address}`.execute(admin)).rows[0].token_hash);
       assert.deepEqual((await send('session')).data.businesses,[]);
     });
     await t.test('invalid setup leaves no partial business; concurrent onboarding creates exactly one',async()=>{
       assert.equal((await send('onboard',{businessName:'',ownerName:'Owner'})).response.statusCode,400);
-      await assert.rejects(()=>sql`select auth.onboard(${digest(jar['__Host-stich-session'])},'Rollback fixture','')`.execute(db),{code:'23514'});
+      await assert.rejects(()=>sql`select stich_auth.onboard(${digest(jar['__Host-stich-session'])},'Rollback fixture','')`.execute(db),{code:'23514'});
       assert.deepEqual((await send('session')).data.businesses,[]);
       const results=await Promise.all([send('onboard',{businessName:'Synthetic Shop',ownerName:'Test Owner'}),send('onboard',{businessName:'Duplicate',ownerName:'Test Owner'})]);
       assert.deepEqual(results.map(r=>r.response.statusCode).sort(),[200,409]);
@@ -69,7 +69,7 @@ test('owner authentication and onboarding through real HTTP handlers and Postgre
       const known=await send('recover',{email:address});const unknown=await send('recover',{email:randomUUID()+'@example.test'});assert.deepEqual(known.data,unknown.data);
       reset=delivered.at(-1).token;
       assert.ok(!known.response.body.includes(reset));
-      await sql`update auth.password_resets set expires_at=now()-interval '1 second' where token_hash=${digest(reset)}`.execute(admin);
+      await sql`update stich_auth.password_resets set expires_at=now()-interval '1 second' where token_hash=${digest(reset)}`.execute(admin);
       assert.equal((await send('reset',{token:reset,password:newPassword})).response.statusCode,400);
       await send('recover',{email:address});reset=delivered.at(-1).token;
       oldCookie=jar['__Host-stich-session'];
@@ -81,23 +81,23 @@ test('owner authentication and onboarding through real HTTP handlers and Postgre
       assert.equal((await send('login',{email:address,password:newPassword})).response.statusCode,200);
     });
     await t.test('expiry is enforced on protected endpoints',async()=>{
-      await sql`update auth.identity_sessions set expires_at=now()-interval '1 second',created_at=now()-interval '1 day' where token_hash=${digest(jar['__Host-stich-session'])}`.execute(admin);
+      await sql`update stich_auth.identity_sessions set expires_at=now()-interval '1 second',created_at=now()-interval '1 day' where token_hash=${digest(jar['__Host-stich-session'])}`.execute(admin);
       assert.equal((await send('session')).response.statusCode,401);assert.equal((await send('business/'+business)).response.statusCode,403);
     });
     await t.test('persistent per-account throttle rejects repeated attempts, independent of API instance',async()=>{
       const target=randomUUID()+'@example.test';let last;
       for(let i=0;i<6;i++)last=await send('login',{email:target,password:plain});assert.equal(last.response.statusCode,429);
-      const result=await sql`select auth.throttle(${digest('login:account:'+target)},5) as allowed`.execute(db);assert.equal(result.rows[0].allowed,false);
+      const result=await sql`select stich_auth.throttle(${digest('login:account:'+target)},5) as allowed`.execute(db);assert.equal(result.rows[0].allowed,false);
     });
   }finally{
     await app.close();
-    const identity=(await sql`select id from auth.identity_accounts where normalised_email=${address}`.execute(admin)).rows[0]?.id;
+    const identity=(await sql`select id from stich_auth.identity_accounts where normalised_email=${address}`.execute(admin)).rows[0]?.id;
     if(identity)await admin.transaction().execute(async trx=>{
       for(const name of ['membership_sessions','membership_roles','membership_scopes','memberships','roles'])await sql`delete from ${sql.table('public.'+name)} where tenant_id=${business}::uuid`.execute(trx);
       if(business)await sql`delete from public.tenants where id=${business}::uuid`.execute(trx);
-      await sql`delete from auth.password_resets where identity_id=${identity}::uuid`.execute(trx);
-      await sql`delete from auth.identity_sessions where identity_id=${identity}::uuid`.execute(trx);
-      await sql`delete from auth.identity_accounts where id=${identity}::uuid`.execute(trx);
+      await sql`delete from stich_auth.password_resets where identity_id=${identity}::uuid`.execute(trx);
+      await sql`delete from stich_auth.identity_sessions where identity_id=${identity}::uuid`.execute(trx);
+      await sql`delete from stich_auth.identity_accounts where id=${identity}::uuid`.execute(trx);
     });
     await Promise.all([db.destroy(),admin.destroy()]);
   }

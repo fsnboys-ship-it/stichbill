@@ -11,7 +11,7 @@ export async function withTenantContext<T>(db: Kysely<Database>, sessionToken: s
   if (!/^[a-f0-9]{64}$/.test(sessionToken) || !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(tenantId)) throw new AccessDeniedError();
   const hash = createHash('sha256').update(sessionToken).digest('hex');
   return db.transaction().execute(async trx => {
-    const { rows } = await sql<{ membership_id: string }>`select membership_id from auth.resolve_context(${hash}, ${tenantId}::uuid)`.execute(trx);
+    const { rows } = await sql<{ membership_id: string }>`select membership_id from stich_auth.resolve_context(${hash}, ${tenantId}::uuid)`.execute(trx);
     if (rows.length !== 1) throw new AccessDeniedError();
     await sql`select set_config('app.tenant_id', ${tenantId.toLowerCase()}, true),
       set_config('app.membership_id', ${rows[0]!.membership_id}, true),

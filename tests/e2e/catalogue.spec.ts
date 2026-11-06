@@ -11,7 +11,7 @@ test('mobile catalogue form components, images, variants, persistence and cashie
  const env=parseEnv(await readFile('.env.test.db','utf8')),url=env.MIGRATION_DATABASE_URL;
  if(!url||new URL(url).pathname!=='/stichbill_test')throw new Error('Isolated test database required');
  const setup=new pg.Client({connectionString:url});await setup.connect();
- try{await setup.query('DELETE FROM auth.attempt_buckets');}finally{await setup.end();}
+ try{await setup.query('DELETE FROM stich_auth.attempt_buckets');}finally{await setup.end();}
  await page.setViewportSize({width:360,height:740});
  try{
   await page.goto('/');await page.getByRole('button',{name:'Create owner account',exact:true}).click();
@@ -52,13 +52,13 @@ test('mobile catalogue form components, images, variants, persistence and cashie
  }finally{
   const db=new pg.Client({connectionString:url});await db.connect();
   try{
-   const tenants=(await db.query('SELECT tenant_id FROM public.memberships WHERE identity_id IN (SELECT id FROM auth.identity_accounts WHERE normalised_email=$1)',[email])).rows;
+   const tenants=(await db.query('SELECT tenant_id FROM public.memberships WHERE identity_id IN (SELECT id FROM stich_auth.identity_accounts WHERE normalised_email=$1)',[email])).rows;
    for(const{tenant_id:tenant}of tenants){
     const images=(await db.query('SELECT id FROM public.product_images WHERE tenant_id=$1',[tenant])).rows;for(const image of images)await removeUncommittedImage(tenant,image.id).catch(()=>{});
     await db.query('BEGIN');await db.query('UPDATE public.products SET image_id=NULL WHERE tenant_id=$1',[tenant]);
-    for(const table of ['auth.catalogue_events','public.product_images','public.variant_barcodes','public.catalogue_prices','public.product_variants','public.product_shops','public.products','public.categories','public.brands','auth.access_events','public.membership_sessions','public.membership_roles','public.membership_scopes','public.branches','public.shops','public.memberships','public.roles'])await db.query(`DELETE FROM ${table} WHERE tenant_id=$1`,[tenant]);await db.query('DELETE FROM public.tenants WHERE id=$1',[tenant]);await db.query('COMMIT');
+    for(const table of ['stich_auth.catalogue_events','public.product_images','public.variant_barcodes','public.catalogue_prices','public.product_variants','public.product_shops','public.products','public.categories','public.brands','stich_auth.access_events','public.membership_sessions','public.membership_roles','public.membership_scopes','public.branches','public.shops','public.memberships','public.roles'])await db.query(`DELETE FROM ${table} WHERE tenant_id=$1`,[tenant]);await db.query('DELETE FROM public.tenants WHERE id=$1',[tenant]);await db.query('COMMIT');
    }
-   for(const address of [email,staffEmail]){const identities=(await db.query('SELECT id FROM auth.identity_accounts WHERE normalised_email=$1',[address])).rows;for(const{id}of identities){await db.query('DELETE FROM auth.password_resets WHERE identity_id=$1',[id]);await db.query('DELETE FROM auth.identity_sessions WHERE identity_id=$1',[id]);await db.query('DELETE FROM auth.identity_accounts WHERE id=$1',[id]);}}
+   for(const address of [email,staffEmail]){const identities=(await db.query('SELECT id FROM stich_auth.identity_accounts WHERE normalised_email=$1',[address])).rows;for(const{id}of identities){await db.query('DELETE FROM stich_auth.password_resets WHERE identity_id=$1',[id]);await db.query('DELETE FROM stich_auth.identity_sessions WHERE identity_id=$1',[id]);await db.query('DELETE FROM stich_auth.identity_accounts WHERE id=$1',[id]);}}
   }finally{await db.end();}
  }
 });

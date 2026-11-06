@@ -1,8 +1,8 @@
 // Reviewed function bodies from immutable access migration; update only with reviewed SQL.
 export const functionHashes: Record<string,string> = {
-  "resolve_context": "4993b69300429e2ca9b05d5f3dd6075073b0dcbf17e920e12a35bd8e5854c46d",
-  "can_access": "d9c675fd265d9d98aade5f057500291660ecb5161f01df964f5b8f9d38075406",
-  "is_owner": "f1b0b2c076d2094e1489af1025d3091af850bd199d42420bd400cbc56b466a5c"
+  "resolve_context": "d266f976b72a03924c88ba513fef68e023eed3eee885e8c0ee5b82370f4a4402",
+  "can_access": "80741dc1057f254d29f12b17803854eccc74664f77fb324b436fac77a9e66c10",
+  "is_owner": "85fa792033f8c956b3c51d9c3b0c7108cfd3a6b37f0ab1457d22b22b3c9cac76"
 };
 export const accessMigrationChecksum = '825df8a98a1559978697ee64e423d7a87686d19686905532309674b67e07eb36';
 
@@ -11,55 +11,55 @@ export const authFunctions = {
     "args": "text, integer",
     "language": "plpgsql",
     "volatility": "v",
-    "hash": "2228e946443823d657bb401d6d6e9b6fd3616a7e890e1bdc5b9e8f3bbce5c1c0"
+    "hash": "e1583e41ebccdcc6b334742ce7f7229c4a85b644580ce2e2ca5aca6e9baaae4c"
   },
   "credentials": {
     "args": "text",
     "language": "sql",
     "volatility": "s",
-    "hash": "7d49d86c7f13e9c335bef548c23a9ab5ebd74ceb00044c943f3b88860180b323"
+    "hash": "18d9ddc285cf661490e16992eb350d2395aa444c458d290177eeddfea264ea60"
   },
   "login": {
     "args": "text, text, text",
     "language": "plpgsql",
     "volatility": "v",
-    "hash": "710d17624e6bfac1714646ab9260e0817e316178b6b0f794b19263e006cd23b6"
+    "hash": "b6b88c5609275c6954cfc0e3e099d86af376d98cf94a80bf269b15cf3055e57f"
   },
   "register_owner": {
     "args": "text, text, text",
     "language": "plpgsql",
     "volatility": "v",
-    "hash": "5020f44bff5f513f289e73498e3926d04fab60d4f7f5e725573b5b0710b498d4"
+    "hash": "7fe8a76e7d1b467fd48bb96b771c779dec96b67febf018789c81224359f7d087"
   },
   "session_info": {
     "args": "text",
     "language": "sql",
     "volatility": "s",
-    "hash": "87a56a8a93dc16b399db319f8713dae1ad63b36df53956566e2a2593df3190a9"
+    "hash": "f7f86eacb45e9d625f301a19c443735f8fea1981b476d7715cd2f524a3451d2b"
   },
   "onboard": {
     "args": "text, text, text",
     "language": "plpgsql",
     "volatility": "v",
-    "hash": "4c395d3c619c70fbfa334bffe2bd19c55dca793cadace6f2067cbd31ba5d9de5"
+    "hash": "7ff67e444828a04dbecc53e3fcae52530bcfc6fc6ca3f9bdf5733074157d7020"
   },
   "logout": {
     "args": "text",
     "language": "sql",
     "volatility": "v",
-    "hash": "2d338d332dac4836ff0bf1303321a92f76b340fa809a47bab8238e68438440e8"
+    "hash": "ee623d521aedda46c78c0ab428efe2005cc4a1ee2a9d9945b881be0f70566b83"
   },
   "request_reset": {
     "args": "text, text",
     "language": "plpgsql",
     "volatility": "v",
-    "hash": "7f95426a451496f065336acb9f19323f654f700b925880e9bf53df5438ec7f96"
+    "hash": "02bd3abdb4a47e91bd845d86dce19e0def6e3e3ae2cd697ef326e1862f6324dd"
   },
   "reset_password": {
     "args": "text, text",
     "language": "plpgsql",
     "volatility": "v",
-    "hash": "9bca0d70a307c9bca8b47eeadecc0d6e45c45c67543ae5bff3ae222c308179a2"
+    "hash": "77f087cc58b9ca0406d3906c9f5c921c73511a4de24dbe00103ded557f24b89c"
   }
 };
 
@@ -68,19 +68,19 @@ export const organisationFunctions = {
     "args": "uuid",
     "language": "plpgsql",
     "volatility": "s",
-    "hash": "8dcc22c896657a7cf21a59cc4299f3e39ee1d872c6c383727a4fc468e65f398d"
+    "hash": "cf754cf5460bacaae326b199185ca3078617c6f78698daf8c40afbb9737b1f90"
   },
   "save_location": {
     "args": "uuid, text, uuid, uuid, text, text, text, text, boolean",
     "language": "plpgsql",
     "volatility": "v",
-    "hash": "115da2941f846606ff0d96295f131b1cea0c2010166240a3efb73831d8b775b0"
+    "hash": "f969639d2a18d895e56e4729df7936c9f685c7f5678c3f3cfb8b614866ea4428"
   },
   "save_staff": {
     "args": "uuid, uuid, text, text, text, boolean, jsonb",
     "language": "plpgsql",
     "volatility": "v",
-    "hash": "71b646440908a26017a10e5d0482b1d2c08be8c15c8583d53471531dfda134d1"
+    "hash": "4a55f8853c04784b068a43cdabb33ee346755fdfad910b3e685fb795217c4462"
   }
 };
 
@@ -90,64 +90,64 @@ export const catalogueFunctions = {
     "args": "uuid, uuid",
     "language": "sql",
     "volatility": "s",
-    "hash": "b2dc089c2b1fedb19c61c1656b6efaec7754d0df966fd16e264fbc9e4c09039a"
+    "hash": "e22151a889106878c1aa4bb2eac83b78c7e574a5f06e54b1a41d3d1280faf761"
   },
   "catalogue_read": {
     "args": "uuid, jsonb",
     "language": "plpgsql",
     "volatility": "s",
-    "hash": "47592e0342ea10f4c9b4051292092e67ef6e5c71c8d2c02eb78395e3ca443272"
+    "hash": "8ccf49a9d2aa286c4b7329aaa051d93a8b5fbb3f424cea03d4aa91c5c48b1acf"
   },
   "catalogue_save": {
     "args": "uuid, text, uuid, jsonb",
     "language": "plpgsql",
     "volatility": "v",
-    "hash": "63e4263c6bf27c7d835bbba43c1987fab18587d68576f9cce00cdcf4935fc926"
+    "hash": "86b835c7bbdc3011429de367d00add73d234a4d254d9bc70c51ed3e1c23c02bc"
   }
 };
 export const catalogueTables: Record<string,{schema:string;policy:string;select:boolean}> = {
   "categories": {
     "schema": "public",
-    "policy": "(auth.catalogue_scope(tenant_id) AND (active OR auth.is_owner(tenant_id)))",
+    "policy": "(stich_auth.catalogue_scope(tenant_id) AND (active OR stich_auth.is_owner(tenant_id)))",
     "select": true
   },
   "brands": {
     "schema": "public",
-    "policy": "(auth.catalogue_scope(tenant_id) AND (active OR auth.is_owner(tenant_id)))",
+    "policy": "(stich_auth.catalogue_scope(tenant_id) AND (active OR stich_auth.is_owner(tenant_id)))",
     "select": true
   },
   "products": {
     "schema": "public",
-    "policy": "auth.catalogue_scope(tenant_id, id)",
+    "policy": "stich_auth.catalogue_scope(tenant_id, id)",
     "select": true
   },
   "product_shops": {
     "schema": "public",
-    "policy": "(auth.catalogue_scope(tenant_id, product_id) AND ((shop_id)::text = current_setting('app.catalogue_shop_id'::text, true)) AND (active OR auth.is_owner(tenant_id)))",
+    "policy": "(stich_auth.catalogue_scope(tenant_id, product_id) AND ((shop_id)::text = current_setting('app.catalogue_shop_id'::text, true)) AND (active OR stich_auth.is_owner(tenant_id)))",
     "select": true
   },
   "product_variants": {
     "schema": "public",
-    "policy": "(auth.catalogue_scope(tenant_id, product_id) AND (active OR auth.is_owner(tenant_id)))",
+    "policy": "(stich_auth.catalogue_scope(tenant_id, product_id) AND (active OR stich_auth.is_owner(tenant_id)))",
     "select": true
   },
   "variant_barcodes": {
     "schema": "public",
-    "policy": "(auth.catalogue_scope(tenant_id, product_id) AND (active OR auth.is_owner(tenant_id)) AND (EXISTS ( SELECT 1\n   FROM public.product_variants v\n  WHERE ((v.tenant_id = variant_barcodes.tenant_id) AND (v.id = variant_barcodes.variant_id)))))",
+    "policy": "(stich_auth.catalogue_scope(tenant_id, product_id) AND (active OR stich_auth.is_owner(tenant_id)) AND (EXISTS ( SELECT 1\n   FROM public.product_variants v\n  WHERE ((v.tenant_id = variant_barcodes.tenant_id) AND (v.id = variant_barcodes.variant_id)))))",
     "select": true
   },
   "catalogue_prices": {
     "schema": "public",
-    "policy": "(auth.catalogue_scope(tenant_id, product_id) AND auth.is_owner(tenant_id))",
+    "policy": "(stich_auth.catalogue_scope(tenant_id, product_id) AND stich_auth.is_owner(tenant_id))",
     "select": false
   },
   "product_images": {
     "schema": "public",
-    "policy": "(auth.catalogue_scope(tenant_id, product_id) AND (EXISTS ( SELECT 1\n   FROM public.products p\n  WHERE ((p.tenant_id = product_images.tenant_id) AND (p.id = product_images.product_id) AND (p.image_id = product_images.id)))))",
+    "policy": "(stich_auth.catalogue_scope(tenant_id, product_id) AND (EXISTS ( SELECT 1\n   FROM public.products p\n  WHERE ((p.tenant_id = product_images.tenant_id) AND (p.id = product_images.product_id) AND (p.image_id = product_images.id)))))",
     "select": true
   },
   "catalogue_events": {
-    "schema": "auth",
+    "schema": "stich_auth",
     "policy": "false",
     "select": false
   }

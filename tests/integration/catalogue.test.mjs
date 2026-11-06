@@ -19,9 +19,9 @@ test('catalogue HTTP, PostgreSQL RLS, precision, images and owner/cashier author
  const db=createDatabase(config.DATABASE_URL),admin=createDatabase(process.env.MIGRATION_DATABASE_URL);await applyMigrations(admin,'database/migrations');await probeDatabase(db);
  const {app}=await createApp(config,{logger:false});await app.init();await app.getHttpAdapter().getInstance().ready();
  const accounts=[],tenants=[],images=[];const encoded=await hashPassword('Synthetic-catalogue-password-123');
- async function account(){const email=randomUUID()+'@example.test',token=secret();await sql`select auth.register_owner(${email},${encoded},${digest(token)})`.execute(db);const id=(await sql`select id from auth.identity_accounts where normalised_email=${email}`.execute(admin)).rows[0].id;const a={email,token,id,csrf:secret(),ip:'127.'+[...randomBytes(3)].join('.')};accounts.push(a);return a;}
- async function onboard(a){const tenant=(await sql`select auth.onboard(${digest(a.token)},'Synthetic catalogue business','Owner') as id`.execute(db)).rows[0].id;tenants.push(tenant);return tenant;}
- const location=(a,tenant,kind,shop,code)=>withTenantContext(db,a.token,tenant,async trx=>(await sql`select auth.save_location(${tenant}::uuid,${kind},null,${shop}::uuid,${code},${'Location '+code},'Test address','Test contact',true) as id`.execute(trx)).rows[0].id);
+ async function account(){const email=randomUUID()+'@example.test',token=secret();await sql`select stich_auth.register_owner(${email},${encoded},${digest(token)})`.execute(db);const id=(await sql`select id from stich_auth.identity_accounts where normalised_email=${email}`.execute(admin)).rows[0].id;const a={email,token,id,csrf:secret(),ip:'127.'+[...randomBytes(3)].join('.')};accounts.push(a);return a;}
+ async function onboard(a){const tenant=(await sql`select stich_auth.onboard(${digest(a.token)},'Synthetic catalogue business','Owner') as id`.execute(db)).rows[0].id;tenants.push(tenant);return tenant;}
+ const location=(a,tenant,kind,shop,code)=>withTenantContext(db,a.token,tenant,async trx=>(await sql`select stich_auth.save_location(${tenant}::uuid,${kind},null,${shop}::uuid,${code},${'Location '+code},'Test address','Test contact',true) as id`.execute(trx)).rows[0].id);
  async function request(a,tenant,scope,path='',body,headers={}){const query=new URLSearchParams(scope);const r=await app.inject({remoteAddress:a.ip,method:body===undefined?'GET':'POST',url:`/api/v1/auth/catalogue/${tenant}${path}?${query}`,headers:{origin:'http://127.0.0.1:5173',cookie:`__Host-stich-session=${a.token}; __Host-stich-csrf=${a.csrf}`,'x-csrf-token':a.csrf,...headers},...(body===undefined?{}:{payload:body})});return{status:r.statusCode,data:r.headers['content-type']?.includes('json')?r.json():null,response:r};}
  const details=async(a,tenant,scope,id)=>(await request(a,tenant,scope,'/products/'+id)).data.products[0];
  const make=(scope,style,variants=[sampleVariant()])=>({id:null,version:null,styleCode:style,name:'Cotton shirt',description:'A real catalogue record',categoryId:null,brandId:null,hsnCode:'6205',active:true,shopIds:[scope.shopId],variants});
@@ -30,8 +30,8 @@ test('catalogue HTTP, PostgreSQL RLS, precision, images and owner/cashier author
   const shop=await location(owner,tenant,'shop',null,'SHOP'),secondShop=await location(owner,tenant,'shop',null,'SECOND'),foreignShop=await location(foreign,other,'shop',null,'FOREIGN');
   const branch=await location(owner,tenant,'branch',shop,'B1'),sibling=await location(owner,tenant,'branch',shop,'B2'),otherBranch=await location(owner,tenant,'branch',secondShop,'B3');
   const scope={shopId:shop},cashScope={shopId:shop,branchId:branch},scope2={shopId:secondShop},foreignScope={shopId:foreignShop};
-  await withTenantContext(db,owner.token,tenant,trx=>sql`select auth.save_staff(${tenant}::uuid,null,${cashier.email},'Test cashier','cashier',true,${JSON.stringify([{shopId:shop,branchId:branch}])}::jsonb)`.execute(trx));
-  cashier.token=secret();await sql`select auth.login(${cashier.email},${encoded},${digest(cashier.token)})`.execute(db);
+  await withTenantContext(db,owner.token,tenant,trx=>sql`select stich_auth.save_staff(${tenant}::uuid,null,${cashier.email},'Test cashier','cashier',true,${JSON.stringify([{shopId:shop,branchId:branch}])}::jsonb)`.execute(trx));
+  cashier.token=secret();await sql`select stich_auth.login(${cashier.email},${encoded},${digest(cashier.token)})`.execute(db);
   let category,brand,product,foreignProduct;
   await t.test('category/brand create, normalized duplicate rejection and independent tenants',async()=>{
    const c=await request(owner,tenant,scope,'/categories',{id:null,version:null,name:'Clothing',active:true});assert.equal(c.status,200);category=c.data.id;
@@ -69,7 +69,7 @@ test('catalogue HTTP, PostgreSQL RLS, precision, images and owner/cashier author
     assert.equal((await sql`select sku from public.product_variants where sku='HIDDEN-S'`.execute(trx)).rows.length,0);
     assert.equal((await sql`select barcode from public.variant_barcodes where tenant_id=${other}::uuid`.execute(trx)).rows.length,0);
    });
-   for(const table of ['public.catalogue_prices','auth.catalogue_events'])await assert.rejects(()=>sql`select * from ${sql.table(table)}`.execute(db),{code:'42501'});
+   for(const table of ['public.catalogue_prices','stich_auth.catalogue_events'])await assert.rejects(()=>sql`select * from ${sql.table(table)}`.execute(db),{code:'42501'});
    await assert.rejects(()=>sql`update public.products set active=false`.execute(db),{code:'42501'});
    await assert.rejects(()=>sql`delete from public.product_variants`.execute(db),{code:'42501'});
   });
@@ -98,7 +98,7 @@ test('catalogue HTTP, PostgreSQL RLS, precision, images and owner/cashier author
    p=await details(owner,tenant,scope,product);assert.equal(p.variants.find(row=>row.id===v.id).costPrice,'0.000001');
    assert.equal((await request(owner,tenant,scope,`/products/${product}/variants`,sampleVariant('NEW-SKU','XXL','GREEN',['000123']))).status,409);
    assert.equal((await request(cashier,tenant,cashScope,`/products/${product}/variants`,sampleVariant('CASH','XXL','GREEN',['CASH']))).status,403);
-   await assert.rejects(()=>withCatalogueContext(db,owner.token,tenant,scope,trx=>sql`select auth.catalogue_save(${tenant}::uuid,'variant',null,${JSON.stringify({...sampleVariant('BAD','M','GREEN',[]),id:undefined,productId:product,costPrice:'NaN'})}::jsonb)`.execute(trx)),{code:'22023'});
+   await assert.rejects(()=>withCatalogueContext(db,owner.token,tenant,scope,trx=>sql`select stich_auth.catalogue_save(${tenant}::uuid,'variant',null,${JSON.stringify({...sampleVariant('BAD','M','GREEN',[]),id:undefined,productId:product,costPrice:'NaN'})}::jsonb)`.execute(trx)),{code:'22023'});
   });
   await t.test('private image upload/read/removal respects scope and preserves history',async()=>{
    let p=await details(owner,tenant,scope,product);
@@ -117,8 +117,8 @@ test('catalogue HTTP, PostgreSQL RLS, precision, images and owner/cashier author
    const c=data.categories.find(c=>c.id===category),b=data.brands.find(b=>b.id===brand);
    assert.equal((await request(owner,tenant,scope,'/categories',{...c,name:'Renamed clothing',active:false})).status,200);
    assert.equal((await request(owner,tenant,scope,'/brands',{...b,name:'Renamed house',active:false})).status,200);
-   const audit=(await sql`select count(*)::int as n from auth.catalogue_events where tenant_id=${tenant}::uuid and before_data is not null`.execute(admin)).rows[0].n;assert.ok(audit>=5);
-   await assert.rejects(()=>sql`insert into auth.catalogue_events(tenant_id,actor_id,entity_kind,entity_id,after_data) values(${tenant}::uuid,${owner.id}::uuid,'product',${product}::uuid,'{}')`.execute(db),{code:'42501'});
+   const audit=(await sql`select count(*)::int as n from stich_auth.catalogue_events where tenant_id=${tenant}::uuid and before_data is not null`.execute(admin)).rows[0].n;assert.ok(audit>=5);
+   await assert.rejects(()=>sql`insert into stich_auth.catalogue_events(tenant_id,actor_id,entity_kind,entity_id,after_data) values(${tenant}::uuid,${owner.id}::uuid,'product',${product}::uuid,'{}')`.execute(db),{code:'42501'});
    await probeDatabase(db);
   });
  }finally{
@@ -126,10 +126,10 @@ test('catalogue HTTP, PostgreSQL RLS, precision, images and owner/cashier author
   for(const [tenant,id] of images)await removeUncommittedImage(tenant,id).catch(()=>{});
   for(const tenant of tenants)await admin.transaction().execute(async trx=>{
    await sql`update public.products set image_id=null where tenant_id=${tenant}::uuid`.execute(trx);
-   for(const table of ['auth.catalogue_events','public.product_images','public.variant_barcodes','public.catalogue_prices','public.product_variants','public.product_shops','public.products','public.categories','public.brands','auth.access_events','public.membership_sessions','public.membership_roles','public.membership_scopes','public.branches','public.shops','public.memberships','public.roles'])await sql`delete from ${sql.table(table)} where tenant_id=${tenant}::uuid`.execute(trx);
+   for(const table of ['stich_auth.catalogue_events','public.product_images','public.variant_barcodes','public.catalogue_prices','public.product_variants','public.product_shops','public.products','public.categories','public.brands','stich_auth.access_events','public.membership_sessions','public.membership_roles','public.membership_scopes','public.branches','public.shops','public.memberships','public.roles'])await sql`delete from ${sql.table(table)} where tenant_id=${tenant}::uuid`.execute(trx);
    await sql`delete from public.tenants where id=${tenant}::uuid`.execute(trx);
   });
-  for(const a of accounts){await sql`delete from auth.password_resets where identity_id=${a.id}::uuid`.execute(admin);await sql`delete from auth.identity_sessions where identity_id=${a.id}::uuid`.execute(admin);await sql`delete from auth.identity_accounts where id=${a.id}::uuid`.execute(admin);}
+  for(const a of accounts){await sql`delete from stich_auth.password_resets where identity_id=${a.id}::uuid`.execute(admin);await sql`delete from stich_auth.identity_sessions where identity_id=${a.id}::uuid`.execute(admin);await sql`delete from stich_auth.identity_accounts where id=${a.id}::uuid`.execute(admin);}
   await Promise.all([db.destroy(),admin.destroy()]);
  }
 });

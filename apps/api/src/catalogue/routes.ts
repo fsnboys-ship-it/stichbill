@@ -9,7 +9,7 @@ import { inspectImage,writeImage,readImage,removeUncommittedImage } from './stor
 export async function withCatalogueContext<T>(db:Kysely<Database>,token:string,tenant:string,scope:z.infer<typeof scopeInput>,work:(trx:Transaction<Database>)=>Promise<T>){
  return withTenantContext(db,token,tenant,async trx=>{
   await sql`select set_config('app.catalogue_shop_id',${scope.shopId},true),set_config('app.catalogue_branch_id',${scope.branchId ?? ''},true)`.execute(trx);
-  if(!(await sql<{allowed:boolean}>`select auth.catalogue_scope(${tenant}::uuid) as allowed`.execute(trx)).rows[0]?.allowed)throw Object.assign(new Error('Access denied'),{code:'42501'});
+  if(!(await sql<{allowed:boolean}>`select stich_auth.catalogue_scope(${tenant}::uuid) as allowed`.execute(trx)).rows[0]?.allowed)throw Object.assign(new Error('Access denied'),{code:'42501'});
   return work(trx);
  });
 }
@@ -21,13 +21,13 @@ function failure(reply:FastifyReply,error:unknown){
 export function catalogueRoutes(server:FastifyInstance,db:Kysely<Database>,session:(request:FastifyRequest)=>string){
  const prefix='/api/v1/auth/catalogue/:tenant';
  const tenantOf=(request:FastifyRequest)=>z.uuid().parse((request.params as {tenant:string}).tenant);
- const save=async(trx:Transaction<Database>,tenant:string,kind:string,id:string|null,data:object)=>(await sql<{data:{id:string;version:number}}>`select auth.catalogue_save(${tenant}::uuid,${kind},${id}::uuid,${JSON.stringify(data)}::jsonb) as data`.execute(trx)).rows[0]!.data;
+ const save=async(trx:Transaction<Database>,tenant:string,kind:string,id:string|null,data:object)=>(await sql<{data:{id:string;version:number}}>`select stich_auth.catalogue_save(${tenant}::uuid,${kind},${id}::uuid,${JSON.stringify(data)}::jsonb) as data`.execute(trx)).rows[0]!.data;
  for(const details of [false,true])server.get(prefix+(details?'/products/:id':''),async(request,reply)=>{
   const query=listInput.safeParse(request.query);if(!query.success)return reply.code(400).send({message:'Check catalogue filters and select a shop.'});
   try{
    const tenant=tenantOf(request),{shopId,branchId,...filters}=query.data;
    const productId=details?z.uuid().parse((request.params as {id:string}).id):undefined;
-   const data=await withCatalogueContext(db,session(request),tenant,{shopId,...(branchId?{branchId}:{})},async trx=>(await sql<{data:{products:unknown[]}}>`select auth.catalogue_read(${tenant}::uuid,${JSON.stringify({...filters,...(details?{productId,status:'all'}:{})})}::jsonb) as data`.execute(trx)).rows[0]!.data);
+   const data=await withCatalogueContext(db,session(request),tenant,{shopId,...(branchId?{branchId}:{})},async trx=>(await sql<{data:{products:unknown[]}}>`select stich_auth.catalogue_read(${tenant}::uuid,${JSON.stringify({...filters,...(details?{productId,status:'all'}:{})})}::jsonb) as data`.execute(trx)).rows[0]!.data);
    if(details && !data.products.length)return reply.code(404).send({message:'Product unavailable.'});
    return data;
   }catch(error){return failure(reply,error);}

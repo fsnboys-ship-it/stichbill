@@ -5,6 +5,9 @@ import { type Migration, type MigrationProvider } from 'kysely/migration';
 import type { Kysely } from 'kysely';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
+import {migrationSource,sha256} from './bootstrap.js';
+import {inspectSecurity as inspectCurrent,validateSecurity as validateCurrent} from './security.js';
+import {inspectSecurity as inspectLegacy,validateSecurity as validateLegacy} from './legacy-security.js';
 import { validateLocalDatabaseUrl } from '../config.js';
 import { createDatabase, type Database } from './connection.js';
 export class SqlMigrationProvider implements MigrationProvider {
@@ -30,17 +33,30 @@ export async function applyMigrations(db: Kysely<Database>, directory: string): 
     if (!rows[0]?.safe) throw new Error('Use the dedicated non-superuser migrator role');
     await sql`create table if not exists public.migration_history (
       version text primary key, checksum text not null, applied_at timestamptz not null default now())`.execute(trx);
-    const applied = await sql<{version: string; checksum: string}>`select version,checksum from public.migration_history order by version`.execute(trx);
+    await sql`alter table public.migration_history add column if not exists execution_checksum text, add column if not exists execution_mode text`.execute(trx);
+    const namespace=(await sql<{present:boolean}>`select to_regnamespace('stich_auth') is not null as present`.execute(trx)).rows[0]!.present;
+    const applied = await sql<{version: string; checksum: string; execution_checksum:string|null; execution_mode:string|null}>`select version,checksum,execution_checksum,execution_mode from public.migration_history order by version`.execute(trx);
     for (const old of applied.rows) if (!migrations[old.version]) throw new Error('Applied migration file missing');
+    const namespaced=namespace || applied.rows.length===0;
     for (const name of Object.keys(migrations)) {
       const content = await readFile(resolve(directory, name), 'utf8');
       const checksum = createHash('sha256').update(content).digest('hex');
       const previous = applied.rows.find(row => row.version === name);
       if (previous && previous.checksum !== checksum) throw new Error('Applied migration checksum changed');
-      if (previous) continue;
+      const executable=await migrationSource(name,content,previous?previous.execution_mode==='stich_auth_v1':namespaced);
+      if(previous){
+        if(previous.execution_checksum && previous.execution_checksum!==sha256(executable.sql))throw new Error('Applied execution checksum changed');
+        if(previous.execution_mode && !['original','stich_auth_v1'].includes(previous.execution_mode))throw new Error('Unknown execution provenance');
+        continue;
+      }
       if (applied.rows.some(row => row.version > name)) throw new Error('Out-of-order migration rejected');
-      await sql.raw(content).execute(trx);
-      await sql`insert into public.migration_history(version,checksum) values (${name},${checksum})`.execute(trx);
+      if(name==='20261104000100_stich_auth_namespace.sql' && applied.rows.length>0){
+        await sql`set local search_path=pg_catalog`.execute(trx);
+        if(namespace)validateCurrent(await inspectCurrent(trx),'provision');
+        else validateLegacy(await inspectLegacy(trx),'provision');
+      }
+      await sql.raw(executable.sql).execute(trx);
+      await sql`insert into public.migration_history(version,checksum,execution_checksum,execution_mode) values (${name},${checksum},${sha256(executable.sql)},${executable.mode})`.execute(trx);
     }
   });
 }

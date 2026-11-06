@@ -4,20 +4,20 @@ import type { Database } from './connection.js';
 import { functionHashes, authFunctions, organisationFunctions, catalogueFunctions, catalogueTables } from './security-manifest.js';
 
 export const tenantTables = ['tenants','memberships','shops','branches','roles','membership_roles','membership_scopes','membership_sessions'];
-type Grant = { role: string; privilege: string; grantable: boolean; grantor: string };
+export type Grant = { role: string; privilege: string; grantable: boolean; grantor: string };
 type Role = { name: string; super: boolean; bypass: boolean; replication: boolean; createRole: boolean; createDb: boolean; inherit: boolean; login: boolean; settings: string[] | null };
 type Relation = { schema: string; name: string; kind: string; owner: string; rls: boolean; force: boolean; acl: Grant[]; columnAcl: boolean };
 type Policy = { table: string; name: string; command: string; permissive: boolean; roles: string[]; using: string | null; check: string | null };
 type FunctionInfo = { schema: string; name: string; args: string; owner: string; definer: boolean; language: string; volatility: string; settings: string[] | null; body: string; acl: Grant[]; executable: boolean };
-type Snapshot = { database: string; currentUser: string; admin: string; adminSafe: boolean; dbAcl: Grant[]; roles: Role[]; memberships: number; ownedDatabases: number; unexpectedSystemPrivileges: number; unexpectedOwnership: number;
+export type Snapshot = { database: string; currentUser: string; admin: string; adminSafe: boolean; dbAcl: Grant[]; roles: Role[]; memberships: number; ownedDatabases: number; unexpectedSystemPrivileges: number; unexpectedOwnership: number; outsideAuthority: number;
   schemas: {name:string;owner:string;acl:Grant[]}[]; relations: Relation[]; policies: Policy[]; functions: FunctionInfo[]; defaults: {schema:string;kind:string;acl:Grant[]}[] };
 
 // Static catalog SQL only. The same implementation is used before provisioning and by readiness.
 export async function inspectSecurity(db: Kysely<Database>): Promise<Snapshot> {
   const {rows}=await sql<Snapshot>`WITH names AS (SELECT current_database() || '_runtime' AS runtime,current_database() || '_migrator' AS migrator),
     owned_toast AS (
-      SELECT c.reltoastrelid AS oid FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace,names WHERE n.nspname IN ('public','auth') AND c.relowner=to_regrole(migrator) AND c.reltoastrelid<>0
-      UNION SELECT i.indexrelid FROM pg_index i JOIN pg_class c ON c.reltoastrelid=i.indrelid JOIN pg_namespace n ON n.oid=c.relnamespace,names WHERE n.nspname IN ('public','auth') AND c.relowner=to_regrole(migrator)
+      SELECT c.reltoastrelid AS oid FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace,names WHERE n.nspname IN ('public','stich_auth') AND c.relowner=to_regrole(migrator) AND c.reltoastrelid<>0
+      UNION SELECT i.indexrelid FROM pg_index i JOIN pg_class c ON c.reltoastrelid=i.indrelid JOIN pg_namespace n ON n.oid=c.relnamespace,names WHERE n.nspname IN ('public','stich_auth') AND c.relowner=to_regrole(migrator)
     ),
     grants AS (
       SELECT 'db' AS kind,d.oid AS object,a.* FROM pg_database d CROSS JOIN LATERAL aclexplode(coalesce(d.datacl,acldefault('d',d.datdba))) a
@@ -42,10 +42,23 @@ export async function inspectSecurity(db: Kysely<Database>): Promise<Snapshot> {
       SELECT c.relowner AS owner,n.nspname AS schema FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE c.oid NOT IN (SELECT oid FROM owned_toast)
       UNION ALL SELECT p.proowner,n.nspname FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
       UNION ALL SELECT nspowner,nspname FROM pg_namespace
-    ) objects,names WHERE owner IN (SELECT oid FROM pg_roles WHERE rolname IN(runtime,migrator)) AND schema NOT IN ('auth','public')) AS "unexpectedOwnership",
+    ) objects,names WHERE owner IN (SELECT oid FROM pg_roles WHERE rolname IN(runtime,migrator)) AND schema NOT IN ('stich_auth','public')) AS "unexpectedOwnership",
+    (CASE WHEN to_regrole(current_database()||'_runtime') IS NULL OR to_regrole(current_database()||'_migrator') IS NULL THEN 0 ELSE ((SELECT count(*) FROM grants g,names WHERE g.grantee IN (to_regrole(runtime),to_regrole(migrator)) AND (
+      (g.kind='schema' AND g.object IN (SELECT oid FROM pg_namespace WHERE nspname NOT IN ('public','stich_auth') AND nspname !~ '^pg_' AND nspname<>'information_schema')) OR
+      (g.kind='table' AND g.object IN (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname NOT IN ('public','stich_auth') AND n.nspname !~ '^pg_' AND n.nspname<>'information_schema')) OR
+      (g.kind='function' AND g.object IN (SELECT p.oid FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname NOT IN ('public','stich_auth') AND n.nspname !~ '^pg_' AND n.nspname<>'information_schema'))))
+     + (SELECT count(*) FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace CROSS JOIN LATERAL aclexplode(a.attacl) x,names WHERE n.nspname NOT IN ('public','stich_auth','information_schema') AND n.nspname !~ '^pg_' AND x.grantee IN (0,to_regrole(runtime),to_regrole(migrator)))
+     + (SELECT count(*) FROM pg_namespace n,names WHERE n.nspname NOT IN ('public','stich_auth') AND n.nspname !~ '^pg_' AND n.nspname<>'information_schema' AND (has_schema_privilege(runtime,n.oid,'CREATE') OR has_schema_privilege(migrator,n.oid,'CREATE')))
+     + (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace,names WHERE n.nspname NOT IN ('public','stich_auth') AND n.nspname !~ '^pg_' AND n.nspname<>'information_schema' AND c.relkind IN ('r','v','m','f') AND (has_table_privilege(runtime,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER') OR has_table_privilege(migrator,c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')))
+     + (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace,names WHERE n.nspname NOT IN ('public','stich_auth') AND n.nspname !~ '^pg_' AND n.nspname<>'information_schema' AND ((has_schema_privilege(runtime,n.oid,'USAGE') AND has_function_privilege(runtime,p.oid,'EXECUTE')) OR (has_schema_privilege(migrator,n.oid,'USAGE') AND has_function_privilege(migrator,p.oid,'EXECUTE'))))
+     + (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace,names WHERE n.nspname NOT IN ('public','stich_auth','information_schema') AND n.nspname !~ '^pg_' AND c.relkind='S' AND (has_sequence_privilege(runtime,c.oid,'USAGE,SELECT,UPDATE') OR has_sequence_privilege(migrator,c.oid,'USAGE,SELECT,UPDATE')))
+     + (SELECT count(*) FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace CROSS JOIN LATERAL aclexplode(t.typacl) x,names WHERE n.nspname NOT IN ('public','stich_auth','information_schema') AND n.nspname !~ '^pg_' AND x.grantee IN (to_regrole(runtime),to_regrole(migrator)))
+     + (SELECT count(*) FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname IN ('public','stich_auth') AND t.typrelid=0 AND t.typelem=0)
+     + (SELECT count(*) FROM pg_parameter_acl p CROSS JOIN LATERAL aclexplode(p.paracl) x,names WHERE x.grantee IN (0,to_regrole(runtime),to_regrole(migrator)))
+     + (SELECT count(*) FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace,names WHERE n.nspname NOT IN ('public','stich_auth') AND t.typowner IN (to_regrole(runtime),to_regrole(migrator))))::integer END) AS "outsideAuthority",
     (SELECT coalesce(jsonb_agg(jsonb_build_object('name',nspname,'owner',pg_get_userbyid(nspowner),'acl',coalesce(a.acl,'[]'))),'[]') FROM pg_namespace n LEFT JOIN acls a ON a.kind='schema' AND a.object=n.oid WHERE nspname !~ '^pg_' AND nspname<>'information_schema') AS schemas,
     (SELECT coalesce(jsonb_agg(jsonb_build_object('schema',n.nspname,'name',c.relname,'kind',c.relkind,'owner',pg_get_userbyid(c.relowner),'rls',c.relrowsecurity,'force',c.relforcerowsecurity,'acl',coalesce(a.acl,'[]'),'columnAcl',EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=c.oid AND attacl IS NOT NULL))),'[]') FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace LEFT JOIN acls a ON a.kind='table' AND a.object=c.oid WHERE n.nspname !~ '^pg_' AND n.nspname<>'information_schema') AS relations,
-    (SELECT coalesce(jsonb_agg(jsonb_build_object('table',c.relname,'name',p.polname,'command',p.polcmd,'permissive',p.polpermissive,'roles',ARRAY(SELECT CASE WHEN r=0 THEN 'PUBLIC' ELSE pg_get_userbyid(r) END FROM unnest(p.polroles) r),'using',pg_get_expr(p.polqual,p.polrelid),'check',pg_get_expr(p.polwithcheck,p.polrelid))),'[]') FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','auth')) AS policies,
+    (SELECT coalesce(jsonb_agg(jsonb_build_object('table',c.relname,'name',p.polname,'command',p.polcmd,'permissive',p.polpermissive,'roles',ARRAY(SELECT CASE WHEN r=0 THEN 'PUBLIC' ELSE pg_get_userbyid(r) END FROM unnest(p.polroles) r),'using',pg_get_expr(p.polqual,p.polrelid),'check',pg_get_expr(p.polwithcheck,p.polrelid))),'[]') FROM pg_policy p JOIN pg_class c ON c.oid=p.polrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname IN ('public','stich_auth')) AS policies,
     (SELECT coalesce(jsonb_agg(jsonb_build_object('schema',n.nspname,'name',p.proname,'args',oidvectortypes(p.proargtypes),'owner',pg_get_userbyid(p.proowner),'definer',p.prosecdef,'language',l.lanname,'volatility',p.provolatile,'settings',p.proconfig,'body',p.prosrc,'acl',coalesce(a.acl,'[]'),'executable',CASE WHEN to_regrole(names.runtime) IS NULL THEN false ELSE has_function_privilege(names.runtime,p.oid,'EXECUTE') END)),'[]') FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_language l ON l.oid=p.prolang CROSS JOIN names LEFT JOIN acls a ON a.kind='function' AND a.object=p.oid WHERE (n.nspname !~ '^pg_' AND n.nspname<>'information_schema') OR p.prosecdef) AS functions,
     (SELECT coalesce(jsonb_agg(jsonb_build_object('schema',CASE WHEN x.defaclnamespace=0 THEN '*' ELSE x.defaclnamespace::regnamespace::text END,'kind',x.defaclobjtype,'acl',coalesce(a.acl,'[]'))),'[]') FROM pg_default_acl x LEFT JOIN acls a ON a.kind='default' AND a.object=x.oid WHERE x.defaclrole IN (SELECT oid FROM pg_roles,names WHERE rolname IN (runtime,migrator))) AS defaults
     FROM pg_database d WHERE datname=current_database()`.execute(db);
@@ -65,18 +78,37 @@ function aclMatches(acl: Grant[], owner: string, others: Record<string,string[]>
 }
 const normal=(value: string | null)=>value?.replace(/\s+/g,' ').trim() ?? null;
 const readExpressions: Record<string,string> = {
-  tenants:'auth.can_access(id)', roles:'auth.can_access(tenant_id)', shops:'(active AND auth.can_access(tenant_id, id))',
-  branches:'(active AND auth.can_access(tenant_id, shop_id, id) AND (EXISTS ( SELECT 1 FROM public.shops s WHERE ((s.tenant_id = branches.tenant_id) AND (s.id = branches.shop_id) AND s.active))))',
+  tenants:'stich_auth.can_access(id)', roles:'stich_auth.can_access(tenant_id)', shops:'(active AND stich_auth.can_access(tenant_id, id))',
+  branches:'(active AND stich_auth.can_access(tenant_id, shop_id, id) AND (EXISTS ( SELECT 1 FROM public.shops s WHERE ((s.tenant_id = branches.tenant_id) AND (s.id = branches.shop_id) AND s.active))))',
 };
 for(const table of ['memberships','membership_roles','membership_scopes','membership_sessions']) {
   const id=table==='memberships'?'id':'membership_id';
-  readExpressions[table]=`(auth.can_access(tenant_id) AND (auth.is_owner(tenant_id) OR ((${id})::text = current_setting('app.membership_id'::text, true))))`;
+  readExpressions[table]=`(stich_auth.can_access(tenant_id) AND (stich_auth.is_owner(tenant_id) OR ((${id})::text = current_setting('app.membership_id'::text, true))))`;
 }
-export function validateSecurity(s: Snapshot, mode: 'provision'|'ready', expectedAdmin?: string, allowLegacyDefaults=false): 'fresh'|'provisioned'|'schema' {
+// A managed contract must be reviewed deployment input, never derived from the same live snapshot.
+// This increment exposes it to compatibility tests/tools only; runtime remains local-only.
+export type ManagedSecurityContract = {
+ database: string; databaseOwner: string; databaseAcl: Grant[];
+ publicSchemaOwner: string; publicSchemaAcl: Grant[];
+ providerSchemas: Record<string,string[]>;
+};
+const exactAcl=(actual:Grant[],expected:Grant[])=>JSON.stringify(actual.map(x=>JSON.stringify([x.role,x.privilege,x.grantable,x.grantor])).sort())===JSON.stringify(expected.map(x=>JSON.stringify([x.role,x.privilege,x.grantable,x.grantor])).sort());
+export function validateSecurity(s: Snapshot, mode: 'provision'|'ready', expectedAdmin?: string, allowLegacyDefaults=false, managed?:ManagedSecurityContract): 'fresh'|'provisioned'|'schema' {
   const runtime=`${s.database}_runtime`, migrator=`${s.database}_migrator`;
-  requireSafe(s.adminSafe && ![runtime,migrator].includes(s.admin) && (!expectedAdmin || s.admin===expectedAdmin),'administrator ownership');
+  if(managed){
+    requireSafe(mode==='ready' && s.database===managed.database && s.admin===managed.databaseOwner && ![runtime,migrator].includes(s.admin),'managed database identity');
+    requireSafe(![runtime].includes(managed.publicSchemaOwner),'managed public owner');
+    requireSafe(managed.databaseAcl.every(g=>g.role===runtime?g.privilege==='CONNECT'&&!g.grantable:g.role===migrator?['CONNECT','CREATE'].includes(g.privilege)&&!g.grantable:g.role==='PUBLIC'?g.privilege==='CONNECT'&&!g.grantable:true),'managed application database privileges');
+    requireSafe(managed.publicSchemaAcl.every(g=>![runtime,'PUBLIC'].includes(g.role)||(g.privilege==='USAGE'&&!g.grantable)),'managed public CREATE exposure');
+    for(const [schema,owners] of Object.entries(managed.providerSchemas))requireSafe(!['public','stich_auth'].includes(schema) && owners.length>0 && owners.every(o=>![runtime,migrator].includes(o)),'provider ownership contract');
+    const provider=(schema:string,owner:string)=>managed.providerSchemas[schema]?.includes(owner);
+    requireSafe(s.schemas.every(n=>['public','stich_auth'].includes(n.name)||provider(n.name,n.owner)) && Object.keys(managed.providerSchemas).every(name=>s.schemas.some(n=>n.name===name)),'provider schema set');
+    requireSafe(s.relations.every(r=>['public','stich_auth'].includes(r.schema)||provider(r.schema,r.owner)) && s.functions.every(f=>['public','stich_auth'].includes(f.schema)||provider(f.schema,f.owner)),'provider object ownership');
+    s={...s,schemas:s.schemas.filter(n=>['public','stich_auth'].includes(n.name)),relations:s.relations.filter(r=>['public','stich_auth'].includes(r.schema)),functions:s.functions.filter(f=>['public','stich_auth'].includes(f.schema))};
+  }
+  requireSafe((managed || s.adminSafe) && ![runtime,migrator].includes(s.admin) && (!expectedAdmin || s.admin===expectedAdmin),'administrator ownership');
   requireSafe(mode!=='ready' || s.currentUser===runtime,'runtime identity');
-  requireSafe(s.memberships===0 && s.ownedDatabases===0 && s.unexpectedSystemPrivileges===0 && s.unexpectedOwnership===0,'role membership or database ownership');
+  requireSafe(s.memberships===0 && s.ownedDatabases===0 && s.unexpectedSystemPrivileges===0 && s.unexpectedOwnership===0 && s.outsideAuthority===0,'role membership or database ownership');
   for(const r of s.roles) requireSafe(!r.super && !r.bypass && !r.replication && !r.createRole && !r.createDb && !r.inherit && r.login && !r.settings?.length,'role attributes');
   if(s.roles.length===0) {
     requireSafe(mode==='provision' && s.relations.length===0 && s.functions.length===0 && s.defaults.length===0 && s.schemas.length===1 && s.schemas[0]?.name==='public','fresh database only');
@@ -86,8 +118,8 @@ export function validateSecurity(s: Snapshot, mode: 'provision'|'ready', expecte
     return 'fresh';
   }
   requireSafe(s.roles.length===2,'partial roles');
-  requireSafe(aclMatches(s.dbAcl,s.admin,{[runtime]:['CONNECT'],[migrator]:['CONNECT','CREATE']}),'database ACL');
-  requireSafe(s.schemas.every(n=>['public','auth'].includes(n.name) && n.owner===migrator && aclMatches(n.acl,migrator,n.name==='public'?{PUBLIC:['USAGE'],[runtime]:['USAGE']}:{[runtime]:['USAGE']})),'schema ownership or ACL');
+  requireSafe(managed?exactAcl(s.dbAcl,managed.databaseAcl):aclMatches(s.dbAcl,s.admin,{[runtime]:['CONNECT'],[migrator]:['CONNECT','CREATE']}),'database ACL');
+  requireSafe(s.schemas.every(n=>['public','stich_auth'].includes(n.name) && (managed && n.name==='public' ? n.owner===managed.publicSchemaOwner && exactAcl(n.acl,managed.publicSchemaAcl) : n.owner===migrator && aclMatches(n.acl,migrator,n.name==='public'?{PUBLIC:['USAGE'],[runtime]:['USAGE']}:{[runtime]:['USAGE']}))),'schema ownership or ACL');
   requireSafe(s.schemas.some(n=>n.name==='public'),'public schema');
   if(s.relations.length===0) {
     requireSafe(mode==='provision' && s.schemas.length===1 && s.functions.length===0 && s.defaults.length===0 && s.policies.length===0,'unmigrated database');
@@ -95,11 +127,11 @@ export function validateSecurity(s: Snapshot, mode: 'provision'|'ready', expecte
   }
   const hasCatalogue=s.relations.some(t=>t.schema==='public' && t.name==='products');
   requireSafe(mode!=='ready' || hasCatalogue,'catalogue migration missing');
-  const hasOrganisation=s.relations.some(t=>t.schema==='auth' && t.name==='access_events');
+  const hasOrganisation=s.relations.some(t=>t.schema==='stich_auth' && t.name==='access_events');
   requireSafe(mode!=='ready' || hasOrganisation,'organisation migration missing');
-  const hasAuth=s.relations.some(t=>t.schema==='auth' && t.name==='password_resets');
+  const hasAuth=s.relations.some(t=>t.schema==='stich_auth' && t.name==='password_resets');
   requireSafe(mode!=='ready' || hasAuth,'authentication migration missing');
-  const expectedTables=[...(hasCatalogue?Object.entries(catalogueTables).map(([name,t])=>`${t.schema}.${name}`):[]),...(hasOrganisation?['auth.access_events']:[]),...(hasAuth?['auth.password_resets','auth.attempt_buckets']:[]),...tenantTables.map(t=>`public.${t}`),'public.migration_history','auth.identity_accounts','auth.identity_sessions'];
+  const expectedTables=[...(hasCatalogue?Object.entries(catalogueTables).map(([name,t])=>`${t.schema}.${name}`):[]),...(hasOrganisation?['stich_auth.access_events']:[]),...(hasAuth?['stich_auth.password_resets','stich_auth.attempt_buckets']:[]),...tenantTables.map(t=>`public.${t}`),'public.migration_history','stich_auth.identity_accounts','stich_auth.identity_sessions'];
   const tables=s.relations.filter(t=>t.kind==='r');
   requireSafe(tables.length===expectedTables.length && tables.every(t=>expectedTables.includes(`${t.schema}.${t.name}`)),'protected table set');
   requireSafe(s.schemas.length===2 && s.relations.every(r=>r.owner===migrator && ['r','i'].includes(r.kind)),'object ownership or kind');
@@ -126,7 +158,7 @@ export function validateSecurity(s: Snapshot, mode: 'provision'|'ready', expecte
   const signatures:Record<string,string>={resolve_context:'text, uuid',can_access:'uuid, uuid, uuid',is_owner:'uuid'};
   for(const f of s.functions) {
     const extra = hasAuth ? ({...authFunctions,...(hasOrganisation?organisationFunctions:{}),...(hasCatalogue?catalogueFunctions:{})} as Record<string,{args:string;language:string;volatility:string;hash:string}>)[f.name] : undefined;
-    requireSafe(f.schema==='auth' && f.owner===migrator && f.definer && f.language===(extra?.language ?? 'sql') && f.volatility===(extra?.volatility ?? 's') && f.args===(extra?.args ?? signatures[f.name]) && JSON.stringify(f.settings)===JSON.stringify(['search_path=pg_catalog']) && createHash('sha256').update(f.body).digest('hex')===(extra?.hash ?? functionHashes[f.name]) && aclMatches(f.acl,migrator,{[runtime]:['EXECUTE']}) && f.executable,'function definition or ACL');
+    requireSafe(f.schema==='stich_auth' && f.owner===migrator && f.definer && f.language===(extra?.language ?? 'sql') && f.volatility===(extra?.volatility ?? 's') && f.args===(extra?.args ?? signatures[f.name]) && JSON.stringify(f.settings)===JSON.stringify(['search_path=pg_catalog']) && createHash('sha256').update(f.body).digest('hex')===(extra?.hash ?? functionHashes[f.name]) && aclMatches(f.acl,migrator,{[runtime]:['EXECUTE']}) && f.executable,'function definition or ACL');
   }
   // Provisioning accepts the exact immutable legacy baseline for the forward migration.
   // Readiness never accepts the legacy default privilege state.

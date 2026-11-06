@@ -49,40 +49,40 @@ test('privilege rejection in an exclusively owned disposable database',async t=>
         {name:`catalogue runtime write: ${table}`,change:`GRANT INSERT ON public.${table} TO ${id(runtimeName)}`,undo:`REVOKE INSERT ON public.${table} FROM ${id(runtimeName)}`},
       ]),
       {name:'cost price SELECT grant',change:`GRANT SELECT ON public.catalogue_prices TO ${id(runtimeName)}`,undo:`REVOKE SELECT ON public.catalogue_prices FROM ${id(runtimeName)}`},
-      {name:'catalogue audit SELECT grant',change:`GRANT SELECT ON auth.catalogue_events TO ${id(runtimeName)}`,undo:`REVOKE SELECT ON auth.catalogue_events FROM ${id(runtimeName)}`},
-      {name:'catalogue audit missing FORCE RLS',change:'ALTER TABLE auth.catalogue_events NO FORCE ROW LEVEL SECURITY',undo:'ALTER TABLE auth.catalogue_events FORCE ROW LEVEL SECURITY'},
-      {name:'catalogue extra audit policy',change:`CREATE POLICY unsafe_catalogue ON auth.catalogue_events TO ${id(runtimeName)} USING(true)`,undo:'DROP POLICY unsafe_catalogue ON auth.catalogue_events'},
-      {name:'catalogue command search_path changed',change:'ALTER FUNCTION auth.catalogue_save(uuid,text,uuid,jsonb) SET search_path=public,pg_catalog',undo:'ALTER FUNCTION auth.catalogue_save(uuid,text,uuid,jsonb) SET search_path=pg_catalog'},
-      {name:'catalogue PUBLIC function',change:'GRANT EXECUTE ON FUNCTION auth.catalogue_read(uuid,jsonb) TO PUBLIC',undo:'REVOKE EXECUTE ON FUNCTION auth.catalogue_read(uuid,jsonb) FROM PUBLIC'},
+      {name:'catalogue audit SELECT grant',change:`GRANT SELECT ON stich_auth.catalogue_events TO ${id(runtimeName)}`,undo:`REVOKE SELECT ON stich_auth.catalogue_events FROM ${id(runtimeName)}`},
+      {name:'catalogue audit missing FORCE RLS',change:'ALTER TABLE stich_auth.catalogue_events NO FORCE ROW LEVEL SECURITY',undo:'ALTER TABLE stich_auth.catalogue_events FORCE ROW LEVEL SECURITY'},
+      {name:'catalogue extra audit policy',change:`CREATE POLICY unsafe_catalogue ON stich_auth.catalogue_events TO ${id(runtimeName)} USING(true)`,undo:'DROP POLICY unsafe_catalogue ON stich_auth.catalogue_events'},
+      {name:'catalogue command search_path changed',change:'ALTER FUNCTION stich_auth.catalogue_save(uuid,text,uuid,jsonb) SET search_path=public,pg_catalog',undo:'ALTER FUNCTION stich_auth.catalogue_save(uuid,text,uuid,jsonb) SET search_path=pg_catalog'},
+      {name:'catalogue PUBLIC function',change:'GRANT EXECUTE ON FUNCTION stich_auth.catalogue_read(uuid,jsonb) TO PUBLIC',undo:'REVOKE EXECUTE ON FUNCTION stich_auth.catalogue_read(uuid,jsonb) FROM PUBLIC'},
       ...['SUPERUSER','BYPASSRLS','REPLICATION','CREATEROLE','CREATEDB','INHERIT'].map(attribute=>({name:`runtime ${attribute}`,change:`ALTER ROLE ${id(runtimeName)} ${attribute}`,undo:`ALTER ROLE ${id(runtimeName)} NO${attribute}`})),
       {name:'migrator REPLICATION',change:`ALTER ROLE ${id(migratorName)} REPLICATION`,undo:`ALTER ROLE ${id(migratorName)} NOREPLICATION`},
       {name:'direct privileged role membership',change:`GRANT pg_read_all_data TO ${id(runtimeName)}`,undo:`REVOKE pg_read_all_data FROM ${id(runtimeName)}`},
       {name:'inherited privileged membership chain',change:`CREATE ROLE ${id(parentName)}; GRANT pg_read_all_data TO ${id(parentName)}; GRANT ${id(parentName)} TO ${id(runtimeName)}`,undo:`REVOKE ${id(parentName)} FROM ${id(runtimeName)}; DROP ROLE ${id(parentName)}`},
       {name:'runtime database ownership',change:`ALTER DATABASE ${id(name)} OWNER TO ${id(runtimeName)}`,undo:`ALTER DATABASE ${id(name)} OWNER TO ${id(adminName)}; REVOKE ALL ON DATABASE ${id(name)} FROM ${id(runtimeName)},${id(migratorName)}; GRANT CONNECT ON DATABASE ${id(name)} TO ${id(runtimeName)},${id(migratorName)}; GRANT CREATE ON DATABASE ${id(name)} TO ${id(migratorName)}`},
-      {name:'runtime schema ownership',change:`ALTER SCHEMA auth OWNER TO ${id(runtimeName)}`,undo:`ALTER SCHEMA auth OWNER TO ${id(migratorName)}; GRANT USAGE ON SCHEMA auth TO ${id(runtimeName)}`},
+      {name:'runtime schema ownership',change:`ALTER SCHEMA stich_auth OWNER TO ${id(runtimeName)}`,undo:`ALTER SCHEMA stich_auth OWNER TO ${id(migratorName)}; GRANT USAGE ON SCHEMA stich_auth TO ${id(runtimeName)}`},
       {name:'unexpected protected-table ownership',change:`ALTER TABLE public.roles OWNER TO ${id(adminName)}`,undo:`ALTER TABLE public.roles OWNER TO ${id(migratorName)}`},
       {name:'database CREATE grant',change:`GRANT CREATE ON DATABASE ${id(name)} TO ${id(runtimeName)}`,undo:`REVOKE CREATE ON DATABASE ${id(name)} FROM ${id(runtimeName)}`},
-      {name:'schema CREATE grant',change:`GRANT CREATE ON SCHEMA auth TO ${id(runtimeName)}`,undo:`REVOKE CREATE ON SCHEMA auth FROM ${id(runtimeName)}`},
-      {name:'authentication SELECT grant',change:`GRANT SELECT ON auth.identity_sessions TO ${id(runtimeName)}`,undo:`REVOKE SELECT ON auth.identity_sessions FROM ${id(runtimeName)}`},
-      ...['password_resets','attempt_buckets','access_events'].map(table=>({name:`new auth table grant: ${table}`,change:`GRANT SELECT ON auth.${table} TO ${id(runtimeName)}`,undo:`REVOKE SELECT ON auth.${table} FROM ${id(runtimeName)}`})),
-      {name:'changed onboarding function',change:'ALTER FUNCTION auth.onboard(text,text,text) SET search_path=public,pg_catalog',undo:'ALTER FUNCTION auth.onboard(text,text,text) SET search_path=pg_catalog'},
-      {name:'PUBLIC reset function',change:'GRANT EXECUTE ON FUNCTION auth.reset_password(text,text) TO PUBLIC',undo:'REVOKE EXECUTE ON FUNCTION auth.reset_password(text,text) FROM PUBLIC'},
-      {name:'authentication column grant',change:`GRANT SELECT(token_hash) ON auth.identity_sessions TO ${id(runtimeName)}`,undo:`REVOKE SELECT(token_hash) ON auth.identity_sessions FROM ${id(runtimeName)}`},
+      {name:'schema CREATE grant',change:`GRANT CREATE ON SCHEMA stich_auth TO ${id(runtimeName)}`,undo:`REVOKE CREATE ON SCHEMA stich_auth FROM ${id(runtimeName)}`},
+      {name:'authentication SELECT grant',change:`GRANT SELECT ON stich_auth.identity_sessions TO ${id(runtimeName)}`,undo:`REVOKE SELECT ON stich_auth.identity_sessions FROM ${id(runtimeName)}`},
+      ...['password_resets','attempt_buckets','access_events'].map(table=>({name:`new auth table grant: ${table}`,change:`GRANT SELECT ON stich_auth.${table} TO ${id(runtimeName)}`,undo:`REVOKE SELECT ON stich_auth.${table} FROM ${id(runtimeName)}`})),
+      {name:'changed onboarding function',change:'ALTER FUNCTION stich_auth.onboard(text,text,text) SET search_path=public,pg_catalog',undo:'ALTER FUNCTION stich_auth.onboard(text,text,text) SET search_path=pg_catalog'},
+      {name:'PUBLIC reset function',change:'GRANT EXECUTE ON FUNCTION stich_auth.reset_password(text,text) TO PUBLIC',undo:'REVOKE EXECUTE ON FUNCTION stich_auth.reset_password(text,text) FROM PUBLIC'},
+      {name:'authentication column grant',change:`GRANT SELECT(token_hash) ON stich_auth.identity_sessions TO ${id(runtimeName)}`,undo:`REVOKE SELECT(token_hash) ON stich_auth.identity_sessions FROM ${id(runtimeName)}`},
       {name:'tenant column UPDATE grant',change:`GRANT UPDATE(name) ON public.shops TO ${id(runtimeName)}`,undo:`REVOKE UPDATE(name) ON public.shops FROM ${id(runtimeName)}`},
       {name:'TRUNCATE bypasses row policies',change:`GRANT TRUNCATE ON public.shops TO ${id(runtimeName)}`,undo:`REVOKE TRUNCATE ON public.shops FROM ${id(runtimeName)}`},
       {name:'grant option',change:`SET ROLE ${id(migratorName)}; GRANT SELECT ON public.shops TO ${id(runtimeName)} WITH GRANT OPTION; RESET ROLE`,undo:`SET ROLE ${id(migratorName)}; REVOKE GRANT OPTION FOR SELECT ON public.shops FROM ${id(runtimeName)}; RESET ROLE`},
       {name:'system authentication catalog grant',change:`GRANT SELECT ON pg_catalog.pg_authid TO ${id(runtimeName)}`,undo:`REVOKE SELECT ON pg_catalog.pg_authid FROM ${id(runtimeName)}`},
       {name:'global default PUBLIC EXECUTE restored',change:`SET ROLE ${id(migratorName)}; ALTER DEFAULT PRIVILEGES GRANT EXECUTE ON FUNCTIONS TO PUBLIC; RESET ROLE`,undo:`SET ROLE ${id(migratorName)}; ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC; RESET ROLE`},
-      {name:'PUBLIC authentication-table access',change:'GRANT SELECT ON auth.identity_accounts TO PUBLIC',undo:'REVOKE SELECT ON auth.identity_accounts FROM PUBLIC'},
-      {name:'PUBLIC function execution',change:'GRANT EXECUTE ON FUNCTION auth.resolve_context(text,uuid) TO PUBLIC',undo:'REVOKE EXECUTE ON FUNCTION auth.resolve_context(text,uuid) FROM PUBLIC'},
+      {name:'PUBLIC authentication-table access',change:'GRANT SELECT ON stich_auth.identity_accounts TO PUBLIC',undo:'REVOKE SELECT ON stich_auth.identity_accounts FROM PUBLIC'},
+      {name:'PUBLIC function execution',change:'GRANT EXECUTE ON FUNCTION stich_auth.resolve_context(text,uuid) TO PUBLIC',undo:'REVOKE EXECUTE ON FUNCTION stich_auth.resolve_context(text,uuid) FROM PUBLIC'},
       {name:'unexpected executable privileged function',change:`CREATE FUNCTION public.unsafe_fixture() RETURNS text LANGUAGE sql SECURITY DEFINER AS 'SELECT current_user::text'`,undo:'DROP FUNCTION public.unsafe_fixture()'},
-      {name:'changed privileged function body',change:`ALTER FUNCTION auth.is_owner(uuid) SET search_path=public,pg_catalog`,undo:'ALTER FUNCTION auth.is_owner(uuid) SET search_path=pg_catalog'},
+      {name:'changed privileged function body',change:`ALTER FUNCTION stich_auth.is_owner(uuid) SET search_path=public,pg_catalog`,undo:'ALTER FUNCTION stich_auth.is_owner(uuid) SET search_path=pg_catalog'},
       ...['tenants','memberships','shops','branches','roles','membership_roles','membership_scopes','membership_sessions'].flatMap(table=>[
         {name:`missing FORCE RLS: ${table}`,change:`ALTER TABLE public.${table} NO FORCE ROW LEVEL SECURITY`,undo:`ALTER TABLE public.${table} FORCE ROW LEVEL SECURITY`},
         {name:`missing RLS: ${table}`,change:`ALTER TABLE public.${table} DISABLE ROW LEVEL SECURITY`,undo:`ALTER TABLE public.${table} ENABLE ROW LEVEL SECURITY`},
         {name:`extra permissive policy: ${table}`,change:`CREATE POLICY unsafe_fixture ON public.${table} FOR SELECT TO ${id(runtimeName)} USING (true)`,undo:`DROP POLICY unsafe_fixture ON public.${table}`},
       ]),
-      {name:'altered existing policy',change:'ALTER POLICY runtime_read ON public.shops USING(true)',undo:'ALTER POLICY runtime_read ON public.shops USING(active AND auth.can_access(tenant_id,id))'},
+      {name:'altered existing policy',change:'ALTER POLICY runtime_read ON public.shops USING(true)',undo:'ALTER POLICY runtime_read ON public.shops USING(active AND stich_auth.can_access(tenant_id,id))'},
     ];
     for(const scenario of scenarios)await t.test(`rejects ${scenario.name}`,async()=>{
       try{
@@ -97,12 +97,12 @@ test('privilege rejection in an exclusively owned disposable database',async t=>
     });
     await t.test('new function has no PUBLIC or runtime EXECUTE after global default revocation',async()=>{
       try{
-        await admin.query(`SET ROLE ${id(migratorName)}; CREATE FUNCTION auth.default_acl_fixture() RETURNS integer LANGUAGE sql AS 'SELECT 1'; RESET ROLE`);
-        const {rows}=await admin.query("SELECT has_function_privilege($1,'auth.default_acl_fixture()','EXECUTE') AS runtime,has_function_privilege($2,'auth.default_acl_fixture()','EXECUTE') AS owner,EXISTS(SELECT 1 FROM pg_proc p CROSS JOIN LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE p.oid='auth.default_acl_fixture()'::regprocedure AND a.grantee=0 AND a.privilege_type='EXECUTE') AS public",[runtimeName,migratorName]);
+        await admin.query(`SET ROLE ${id(migratorName)}; CREATE FUNCTION stich_auth.default_acl_fixture() RETURNS integer LANGUAGE sql AS 'SELECT 1'; RESET ROLE`);
+        const {rows}=await admin.query("SELECT has_function_privilege($1,'stich_auth.default_acl_fixture()','EXECUTE') AS runtime,has_function_privilege($2,'stich_auth.default_acl_fixture()','EXECUTE') AS owner,EXISTS(SELECT 1 FROM pg_proc p CROSS JOIN LATERAL aclexplode(coalesce(p.proacl,acldefault('f',p.proowner))) a WHERE p.oid='stich_auth.default_acl_fixture()'::regprocedure AND a.grantee=0 AND a.privilege_type='EXECUTE') AS public",[runtimeName,migratorName]);
         assert.deepEqual(rows[0],{runtime:false,owner:true,public:false});
         const restricted=new pg.Client({connectionString:runtimeUrl.href});await restricted.connect();
-        try{await assert.rejects(()=>restricted.query('SELECT auth.default_acl_fixture()'),{code:'42501'});}finally{await restricted.end();}
-      }finally{await admin.query('RESET ROLE; DROP FUNCTION IF EXISTS auth.default_acl_fixture()');}
+        try{await assert.rejects(()=>restricted.query('SELECT stich_auth.default_acl_fixture()'),{code:'42501'});}finally{await restricted.end();}
+      }finally{await admin.query('RESET ROLE; DROP FUNCTION IF EXISTS stich_auth.default_acl_fixture()');}
       await probeDatabase(db);
     });
   }finally{
